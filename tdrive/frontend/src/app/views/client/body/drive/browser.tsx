@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from '@heroicons/react/outline';
+import { ChevronDownIcon, RefreshIcon } from '@heroicons/react/outline';
 import { Button } from '@atoms/button/button';
 import { Base, BaseSmall, Subtitle, Title } from '@atoms/text';
 import Menu from '@components/menus/menu';
@@ -44,6 +44,7 @@ import { DndContext, useSensors, useSensor, PointerSensor, DragOverlay } from '@
 import { Droppable } from 'app/features/dragndrop/hook/droppable';
 import { Draggable } from 'app/features/dragndrop/hook/draggable';
 import { useDriveActions } from '@features/drive/hooks/use-drive-actions';
+import { useDropboxImport } from '@features/drive/hooks/use-dropbox-import';
 import { ConfirmModalAtom } from './modals/confirm-move/index';
 import { useCurrentUser } from 'app/features/users/hooks/use-current-user';
 import { ConfirmModal } from './modals/confirm-move';
@@ -197,6 +198,7 @@ export default memo(
     const [activeIndex, setActiveIndex] = useState(null);
     const [activeChild, setActiveChild] = useState(null);
     const { update } = useDriveActions();
+    const { importing, importDropboxFolder } = useDropboxImport();
     const sensors = useSensors(
       useSensor(PointerSensor, {
         activationConstraint: {
@@ -351,6 +353,23 @@ export default memo(
       const timer = setTimeout(() => setButtonsVisible(true), 0);
       return () => clearTimeout(timer);
     }, []);
+
+    // Détecter si on est dans une vue Dropbox
+    const isDropboxView = parentId?.startsWith('dropbox_');
+    
+    // Fonction pour synchroniser les fichiers Dropbox
+    const handleDropboxSync = useCallback(async () => {
+      if (!isDropboxView) return;
+      
+      // Extraire le chemin Dropbox du parentId
+      const dropboxPath = parentId === 'dropbox_root' ? '' : parentId.replace('dropbox_', '').replace(/_/g, '/');
+      
+      try {
+        await importDropboxFolder(dropboxPath, 'user_' + user?.id);
+      } catch (error) {
+        console.error('Erreur lors de la synchronisation Dropbox:', error);
+      }
+    }, [isDropboxView, parentId, importDropboxFolder, user?.id]);
 
     return (
       <>
@@ -523,6 +542,43 @@ export default memo(
                     </Button>
                   </Menu>
                 )}
+                
+                {/* Bouton de synchronisation Dropbox */}
+                {isDropboxView && buttonsVisible && (
+                  <Button
+                    theme="outline"
+                    className="ml-4 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-500 px-0 md:px-4"
+                    onClick={handleDropboxSync}
+                    disabled={importing}
+                    testClassId="button-dropbox-sync"
+                  >
+                    <RefreshIcon 
+                      className={`h-4 w-4 mr-2 -ml-1 ${importing ? 'animate-spin' : ''}`} 
+                    />
+                    <span>
+                      {importing ? 'Synchronisation...' : 'Synchroniser avec Mon disque'}
+                    </span>
+                  </Button>
+                )}
+                
+                {/* Bouton d'import Dropbox dans My Drive */}
+                {!isDropboxView && viewId === 'user_' + user?.id && buttonsVisible && (
+                  <Button
+                    theme="outline"
+                    className="ml-4 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-500 px-0 md:px-4"
+                    onClick={() => importDropboxFolder('', 'user_' + user?.id)}
+                    disabled={importing}
+                    testClassId="button-import-dropbox"
+                  >
+                    <RefreshIcon 
+                      className={`h-4 w-4 mr-2 -ml-1 ${importing ? 'animate-spin' : ''}`} 
+                    />
+                    <span>
+                      {importing ? 'Import en cours...' : 'Importer depuis Dropbox'}
+                    </span>
+                  </Button>
+                )}
+                
                 {viewId !== 'shared_with_me' && buttonsVisible && (
                   <Menu menu={() => onBuildContextMenu(details)} testClassId="browser-menu-more">
                     {' '}

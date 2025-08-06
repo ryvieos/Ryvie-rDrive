@@ -199,7 +199,7 @@ export default () => {
         )}
         <Button
           onClick={() => {
-            navigateInstantly('trash', 'trash');
+            navigateInstantly('trash_' + user?.id, 'trash_' + user?.id);
           }}
           size="lg"
           theme="white"
