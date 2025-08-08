@@ -90,6 +90,7 @@ export default () => {
   if (inTrash) folderType = 'trash';
   if (sharedWithMe) folderType = 'shared';
   const [connectingDropbox, setConnectingDropbox] = useState(false);
+  const [connectingGoogleDrive, setConnectingGoogleDrive] = useState(false);
 
 
 
@@ -280,7 +281,76 @@ export default () => {
           My Dropbox
         </Button>
 
+        {/* Google Drive Buttons */}
+        <Button
+          onClick={async () => {
+            if (!user) {
+              alert('Aucun utilisateur connecté');
+              return;
+            }
 
+            setConnectingGoogleDrive(true);
+            try {
+              console.log('🔗 Connexion Google Drive pour l\'utilisateur:', user);
+              
+              // Construire l'URL du backend dynamiquement avec les informations utilisateur
+              const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
+              const userEmail = encodeURIComponent(user.email);
+              const response = await fetch(`${backendUrl}/v1/drivers/GoogleDrive?userEmail=${userEmail}`);
+              
+              console.log('📤 Requête envoyée avec userEmail:', user.email);
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+              
+              const data = await response.json();
+              console.log('✅ Réponse du backend Google Drive:', data);
+              
+              if (data && data.addition && data.addition.AuthUrl) {
+                console.log('🔀 Redirection vers Google Drive OAuth:', data.addition.AuthUrl);
+                window.location.href = data.addition.AuthUrl;
+              } else {
+                throw new Error('Invalid response format');
+              }
+            } catch (e) {
+              console.error('Google Drive connection error:', e);
+              setConnectingGoogleDrive(false);
+            }
+          }}
+          size="lg"
+          theme="white"
+          className="w-full mb-1"
+          testClassId="sidebar-googledrive-connect"
+          disabled={connectingGoogleDrive}
+        >
+          <img 
+            src="https://ssl.gstatic.com/docs/doclist/images/drive_2022q3_32dp.png" 
+            alt="Google Drive" 
+            className="w-5 h-5 mr-4"
+          />
+          {connectingGoogleDrive 
+            ? 'Redirecting to Google Drive...' 
+            : 'Connect Google Drive'}
+        </Button>
+
+        <Button
+          onClick={() => {
+            setParentId('googledrive_root');
+            history.push(`/client/${company}/v/googledrive_root`);
+          }}
+          size="lg"
+          theme="white"
+          className={`w-full mb-1 ${parentId === 'googledrive_root' || parentId.startsWith('googledrive_') ? activeClass : ''}`}
+          testClassId="sidebar-googledrive-browse"
+        >
+          <img 
+            src="https://ssl.gstatic.com/docs/doclist/images/drive_2022q3_32dp.png" 
+            alt="Google Drive" 
+            className="w-5 h-5 mr-4"
+          />
+          My Google Drive
+        </Button>
 
         {false && (
           <>
