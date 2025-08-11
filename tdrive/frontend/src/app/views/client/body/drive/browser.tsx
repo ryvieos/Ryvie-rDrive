@@ -10,6 +10,7 @@ import { useDriveUpload } from '@features/drive/hooks/use-drive-upload';
 import { DriveItemSelectedList, DriveItemSort, DriveNavigationState } from '@features/drive/state/store';
 import { formatBytes } from '@features/drive/utils';
 import useRouterCompany from '@features/router/hooks/use-router-company';
+import JWTStorage from '@features/auth/jwt-storage-service';
 import _ from 'lodash';
 import { memo, Suspense, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { atomFamily, useRecoilState, useSetRecoilState, useRecoilValue } from 'recoil';
@@ -44,9 +45,10 @@ import { DndContext, useSensors, useSensor, PointerSensor, DragOverlay } from '@
 import { Droppable } from 'app/features/dragndrop/hook/droppable';
 import { Draggable } from 'app/features/dragndrop/hook/draggable';
 import { useDriveActions } from '@features/drive/hooks/use-drive-actions';
-import { useDropboxImport } from '@features/drive/hooks/use-dropbox-import';
+import { useCloudImport } from '@features/drive/hooks/use-dropbox-import';
 import { ConfirmModalAtom } from './modals/confirm-move/index';
 import { useCurrentUser } from 'app/features/users/hooks/use-current-user';
+import { ToasterService } from '@features/global/services/toaster-service';
 import { ConfirmModal } from './modals/confirm-move';
 import { useHistory } from 'react-router-dom';
 import { SortIcon } from 'app/atoms/icons-agnostic';
@@ -198,7 +200,8 @@ export default memo(
     const [activeIndex, setActiveIndex] = useState(null);
     const [activeChild, setActiveChild] = useState(null);
     const { update } = useDriveActions();
-    const { importing, importDropboxFolder } = useDropboxImport();
+    const { importing: importingDropbox, importDropboxFolder } = useCloudImport();
+    const importingGoogleDrive = false; // Simple state for Google Drive
     const sensors = useSensors(
       useSensor(PointerSensor, {
         activationConstraint: {
@@ -357,6 +360,9 @@ export default memo(
     // Détecter si on est dans une vue Dropbox
     const isDropboxView = parentId?.startsWith('dropbox_');
     
+    // Détecter si on est dans une vue Google Drive
+    const isGoogleDriveView = parentId?.startsWith('googledrive_');
+    
     // Fonction pour synchroniser les fichiers Dropbox
     const handleDropboxSync = useCallback(async () => {
       if (!isDropboxView) return;
@@ -370,6 +376,37 @@ export default memo(
         console.error('Erreur lors de la synchronisation Dropbox:', error);
       }
     }, [isDropboxView, parentId, importDropboxFolder, user?.id]);
+    
+    // Fonction pour synchroniser les fichiers Google Drive
+    const handleGoogleDriveSync = async () => {
+      console.log('🔄 Google Drive sync button clicked');
+      
+      if (importingDropbox) {
+        console.log('⚠️ Import already in progress');
+        return;
+      }
+      
+      try {
+        // Vérifier que l'utilisateur est connecté
+        if (!user?.id) {
+          ToasterService.error('Utilisateur non connecté');
+          return;
+        }
+        
+        // Pour Google Drive, synchroniser vers "My Drive" (dossier personnel utilisateur)
+        // au lieu de la vue Google Drive actuelle
+        const myDriveFolderId = `user_${user.id}`;
+        
+        console.log(`🔄 Starting Google Drive sync to My Drive (${myDriveFolderId})`);
+        
+        // Utiliser le même hook unifié que Dropbox avec provider Google Drive
+        await importDropboxFolder('', myDriveFolderId, { provider: 'googledrive' });
+        console.log('✅ Google Drive sync completed successfully');
+      } catch (error) {
+        console.error('❌ Google Drive sync failed:', error);
+        ToasterService.error(`Erreur lors de la synchronisation Google Drive: ${(error as Error).message}`);
+      }
+    };
 
     return (
       <>
@@ -549,14 +586,32 @@ export default memo(
                     theme="outline"
                     className="ml-4 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-500 px-0 md:px-4"
                     onClick={handleDropboxSync}
-                    disabled={importing}
+                    disabled={importingDropbox}
                     testClassId="button-dropbox-sync"
                   >
                     <RefreshIcon 
-                      className={`h-4 w-4 mr-2 -ml-1 ${importing ? 'animate-spin' : ''}`} 
+                      className={`h-4 w-4 mr-2 -ml-1 ${importingDropbox ? 'animate-spin' : ''}`} 
                     />
                     <span>
-                      {importing ? 'Synchronisation...' : 'Synchroniser avec Mon disque'}
+                      {importingDropbox ? 'Synchronisation...' : 'Synchroniser avec Mon disque'}
+                    </span>
+                  </Button>
+                )}
+                
+                {/* Bouton de synchronisation Google Drive */}
+                {isGoogleDriveView && buttonsVisible && (
+                  <Button
+                    theme="outline"
+                    className="ml-4 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-500 px-0 md:px-4"
+                    onClick={handleGoogleDriveSync}
+                    disabled={importingGoogleDrive}
+                    testClassId="button-googledrive-sync"
+                  >
+                    <RefreshIcon 
+                      className={`h-4 w-4 mr-2 -ml-1 ${importingGoogleDrive ? 'animate-spin' : ''}`} 
+                    />
+                    <span>
+                      {importingGoogleDrive ? 'Synchronisation...' : 'Synchroniser avec Mon disque'}
                     </span>
                   </Button>
                 )}
@@ -567,14 +622,14 @@ export default memo(
                     theme="outline"
                     className="ml-4 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-500 px-0 md:px-4"
                     onClick={() => importDropboxFolder('', 'user_' + user?.id)}
-                    disabled={importing}
+                    disabled={importingDropbox}
                     testClassId="button-import-dropbox"
                   >
                     <RefreshIcon 
-                      className={`h-4 w-4 mr-2 -ml-1 ${importing ? 'animate-spin' : ''}`} 
+                      className={`h-4 w-4 mr-2 -ml-1 ${importingDropbox ? 'animate-spin' : ''}`} 
                     />
                     <span>
-                      {importing ? 'Import en cours...' : 'Importer depuis Dropbox'}
+                      {importingDropbox ? 'Import en cours...' : 'Importer depuis Dropbox'}
                     </span>
                   </Button>
                 )}

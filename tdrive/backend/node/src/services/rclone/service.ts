@@ -28,9 +28,19 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     const sanitized = userEmail.replace(/[@\.]/g, '_').toLowerCase();
     return `dropbox_${sanitized}`;
   }
+  
+  // Génère un nom de remote Google Drive basé sur l'email
+  private getGoogleDriveRemoteName(userEmail: string): string {
+    const sanitized = userEmail.replace(/[@\.]/g, '_').toLowerCase();
+    return `googledrive_${sanitized}`;
+  }
   private PROXY = process.env.OAUTH_PROXY || 'https://cloudoauth.files.ryvie.fr';
   private DROPBOX_APPKEY = 'fuv2aur5vtmg0r3'; 
   private DROPBOX_APPSECRET = 'ejsdcf3b51q8hvf';
+  
+  // Google Drive credentials
+  private GOOGLE_CLIENT_ID = '758017908766-8586ul049ht0h10vgp779dskk4riu7ug.apps.googleusercontent.com';
+  private GOOGLE_CLIENT_SECRET = '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';
 
   constructor() {
     super();
@@ -206,6 +216,46 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     logger.info('→ AuthUrl generated:', authUrl);
     return authUrl;
   }
+  
+  async getGoogleDriveAuthUrl(request?: any): Promise<string> {
+    const redirectUri = encodeURIComponent(this.PROXY);
+    
+    // Générer l'URL de callback dynamiquement pour pointer vers le backend Google Drive
+    let callbackBase = '/v1/recover/GoogleDrive';
+    if (request) {
+      const protocol = request.protocol || 'http';
+      let host = request.headers.host || 'localhost:4000';
+      
+      // Si l'host contient le port 3000 (frontend), on le remplace par 4000 (backend)
+      if (host.includes(':3000')) {
+        host = host.replace(':3000', ':4000');
+      } else if (!host.includes(':')) {
+        host = `${host}:4000`;
+      }
+      
+      callbackBase = `${protocol}://${host}/v1/recover/GoogleDrive`;
+    }
+    
+    const state = encodeURIComponent(callbackBase);
+    const scope = encodeURIComponent([
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/drive.metadata.readonly'
+    ].join(' '));
+
+    const authUrl = [
+      'https://accounts.google.com/o/oauth2/v2/auth',
+      `client_id=${this.GOOGLE_CLIENT_ID}`,
+      `redirect_uri=${redirectUri}`,
+      'response_type=code',
+      `scope=${scope}`,
+      `state=${state}`,
+      'access_type=offline',
+      'prompt=consent'
+    ].join('&').replace('auth&', 'auth?');
+
+    logger.info('→ Google Drive AuthUrl generated:', authUrl);
+    return authUrl;
+  }
 
   async listFiles(path: string): Promise<any[]> {
     logger.info(`📁 Listing files at path: ${path}`);
@@ -262,6 +312,151 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         } catch (parseError) {
           logger.error('📁 Failed to parse rclone output:', { parseError, stdout });
           reject(new Error('Failed to parse file list'));
+        }
+      });
+    });
+  }
+  
+  /**
+   * Calcule approximativement la taille d'un dossier Google Drive en parcourant ses fichiers
+   * Limite la profondeur et le nombre de fichiers pour éviter une surcharge
+   * S'arrête et retourne -1 si la taille dépasse 5 Go
+   */
+  private async approximateGoogleDriveFolderSize(folderPath: string, remoteName: string, depth: number = 0): Promise<number> {
+    // Seuil de 5 Go en octets
+    const SIZE_THRESHOLD = 5 * 1024 * 1024 * 1024;
+    
+    // Limiter la profondeur de récursion pour éviter les performances
+    if (depth > 2) {
+      return 1024 * 1024 * 10; // Retourner 10MB pour les dossiers profonds
+    }
+    
+    try {
+      const remotePath = `${remoteName}:${folderPath}`;
+      const cmd = `rclone lsjson "${remotePath}" --max-depth 1`;
+      
+      const result = await new Promise<string>((resolve, reject) => {
+        exec(cmd, (error, stdout, stderr) => {
+          if (error) {
+            logger.warn(`Erreur lors du calcul de la taille du dossier Google Drive ${folderPath}:`, error);
+            reject(error);
+            return;
+          }
+          resolve(stdout);
+        });
+      });
+      
+      const files = JSON.parse(result || '[]');
+      
+      // Limiter le nombre de fichiers pour le calcul
+      const MAX_FILES = 20;
+      const sampleFiles = files.length > MAX_FILES ? files.slice(0, MAX_FILES) : files;
+      
+      let totalSize = 0;
+      let fileCount = 0;
+      
+      // Calculer la taille des fichiers et sous-dossiers
+      for (const file of sampleFiles) {
+        // Vérifier si on a déjà dépassé le seuil de 5 Go
+        if (totalSize > SIZE_THRESHOLD) {
+          logger.info(`Dossier Google Drive ${folderPath} dépasse le seuil de 5 Go, arrêt du calcul`); 
+          return -1; // Code spécial pour indiquer > 5 Go
+        }
+        
+        if (!file.IsDir) {
+          totalSize += file.Size || 0;
+          fileCount++;
+        } else if (depth < 2) {
+          // Récursion limitée pour les sous-dossiers
+          const subFolderPath = `${folderPath}${folderPath ? '/' : ''}${file.Name}`;
+          const subFolderSize = await this.approximateGoogleDriveFolderSize(subFolderPath, remoteName, depth + 1);
+          
+          // Si un sous-dossier est déjà trop grand
+          if (subFolderSize === -1) {
+            return -1;
+          }
+          
+          totalSize += subFolderSize;
+        }
+      }
+      
+      // Extrapoler la taille si nous n'avons pas traité tous les fichiers
+      if (files.length > MAX_FILES) {
+        const averageSize = fileCount > 0 ? totalSize / fileCount : 0;
+        totalSize = Math.round(averageSize * files.length);
+      }
+      
+      // Vérification finale du seuil de 5 Go
+      if (totalSize > SIZE_THRESHOLD) {
+        logger.info(`Dossier Google Drive ${folderPath} dépasse le seuil de 5 Go après extrapolation`); 
+        return -1; // Code spécial pour indiquer > 5 Go
+      }
+      
+      return totalSize;
+    } catch (error) {
+      logger.error(`Erreur lors du calcul de la taille du dossier Google Drive ${folderPath}:`, error);
+      return 0;
+    }
+  }
+  
+  /**
+   * Liste les fichiers Google Drive via rclone
+   */
+  public async listGoogleDriveFiles(path: string, remoteName: string): Promise<any[]> {
+    logger.info(`📁 Listing Google Drive files at path: ${path} with remote: ${remoteName}`);
+    
+    return new Promise(async (resolve, reject) => {
+      const remotePath = `${remoteName}:${path}`;
+      const cmd = `rclone lsjson "${remotePath}"`;
+      
+      logger.info('🔧 Executing Google Drive rclone command:', cmd);
+      
+      exec(cmd, async (error, stdout, stderr) => {
+        if (error) {
+          logger.error('❌ Google Drive rclone command failed:', { error: error.message, stderr });
+          reject(error);
+          return;
+        }
+
+        if (stderr) {
+          logger.warn('⚠️ Google Drive rclone stderr:', stderr);
+        }
+
+        logger.info('📂 Google Drive rclone stdout length:', stdout.length);
+
+        try {
+          const files = JSON.parse(stdout || '[]');
+          logger.info('✅ Parsed Google Drive files count:', files.length);
+          
+          // Transformer les fichiers au format attendu par Twake Drive
+          const transformedFiles = await Promise.all(files.map(async (file: any) => {
+            let size = file.Size > 0 ? file.Size : 0;
+            
+            // Calculer approximativement la taille des dossiers
+            if (file.IsDir) {
+              size = await this.approximateFolderSize(`${path}${path ? '/' : ''}${file.Name}`);
+            }
+            
+            // Formater la taille pour les gros dossiers
+            const formattedSize = size > 1024 * 1024 * 100 ? -1 : size; // -1 indiquera > 100MB
+            
+            return {
+              id: file.ID || file.Path,
+              name: file.Name,
+              path: file.Path,
+              size: formattedSize,
+              display_size: this.formatFileSize(size),
+              is_directory: file.IsDir || false,
+              mime_type: file.MimeType || (file.IsDir ? 'inode/directory' : 'application/octet-stream'),
+              modified_at: file.ModTime,
+              source: 'googledrive'
+            };
+          }));
+          
+          resolve(transformedFiles);
+        } catch (parseError) {
+          logger.error('📁 Failed to parse Google Drive rclone output:', { parseError, stdout });
+          reject(new Error('Failed to parse Google Drive file list'));
         }
       });
     });
@@ -990,18 +1185,26 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
       try {
         const path = (request.query.path as string) || '';
         const userEmail = request.query.userEmail as string || 'default@user.com';
+        const provider = request.query.provider as string || 'dropbox'; // 'dropbox' ou 'googledrive'
         
-        logger.info('📧 Email utilisateur pour listing:', userEmail);
+        logger.info(`📧 Email utilisateur pour listing ${provider}:`, userEmail);
         
-        // Mettre à jour le remote name pour cet utilisateur
-        this.currentUserEmail = userEmail;
-        this.REMOTE_NAME = this.getRemoteName(userEmail);
-       // logger.info('🔧 Remote name mis à jour pour listing:', this.REMOTE_NAME);
-        
-       // logger.info('🚀 About to call listFiles with path:', path);
-        const files = await this.listFiles(path);
-       // logger.info('📤 Sending files response:', files.length, 'files');
-        return reply.send(files);
+        if (provider === 'googledrive') {
+          // Utiliser le remote Google Drive pour cet utilisateur
+          const googleDriveRemoteName = this.getGoogleDriveRemoteName(userEmail);
+          logger.info('🔧 Google Drive Remote name pour listing:', googleDriveRemoteName);
+          
+          const files = await this.listGoogleDriveFiles(path, googleDriveRemoteName);
+          return reply.send(files);
+        } else {
+          // Comportement Dropbox par défaut (existant)
+          this.currentUserEmail = userEmail;
+          this.REMOTE_NAME = this.getRemoteName(userEmail);
+          logger.info('🔧 Dropbox Remote name pour listing:', this.REMOTE_NAME);
+          
+          const files = await this.listFiles(path);
+          return reply.send(files);
+        }
       } catch (error) {
        // logger.error('❌ Listing exception:', error);
         return reply.status(500).send({ error: 'Internal listing error', message: error.message });
@@ -1099,21 +1302,23 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     }, async (request: any, reply) => {
       logger.info('🔍 ANALYZE ENDPOINT CALLED');
       try {
-        const { path: dropboxPath = '', userEmail } = request.body;
+        const { path: cloudPath = '', userEmail, provider = 'dropbox' } = request.body;
         
         if (!userEmail) {
           return reply.status(400).send({ error: 'userEmail is required' });
         }
         
-        logger.info(`🔍 Analyzing Dropbox structure for user: ${userEmail}`);
-        logger.info(`📂 Dropbox path: "${dropboxPath}"`);
+        logger.info(`🔍 Analyzing ${provider.toUpperCase()} structure for user: ${userEmail}`);
+        logger.info(`📂 ${provider.toUpperCase()} path: "${cloudPath}"`);
         
-        // Mettre à jour le remote pour cet utilisateur
+        // Mettre à jour le remote pour cet utilisateur selon le provider
         this.currentUserEmail = userEmail;
-        this.REMOTE_NAME = this.getRemoteName(userEmail);
+        this.REMOTE_NAME = provider === 'googledrive' 
+          ? this.getGoogleDriveRemoteName(userEmail)
+          : this.getRemoteName(userEmail);
         
-        // Lister tous les fichiers Dropbox
-        const remotePath = `${this.REMOTE_NAME}:${dropboxPath}`;
+        // Lister tous les fichiers du cloud provider
+        const remotePath = `${this.REMOTE_NAME}:${cloudPath}`;
         const listCommand = `rclone lsjson --recursive "${remotePath}"`;
         logger.info(`📋 Listing files: ${listCommand}`);
         
@@ -1181,9 +1386,9 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
             logger.info('\n🗂️ === MYDRIVE CONTENT ===');
             
             const executionContext = {
-              company: { id: 'af114530-5cc6-11f0-8de8-f78b546249a5' },
+              company: { id: 'c27eaab0-73a3-11f0-b9ef-8519a7f1b5e4' },
               user: { 
-                id: request.user?.id || '4e272180-5cc7-11f0-917c-559ae224df7f',
+                id: request.user?.id || 'c2611090-73a3-11f0-b9ef-8519a7f1b5e4',
                 email: userEmail,
                 server_request: true,
                 application_id: null
@@ -1359,13 +1564,13 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
       }
     });
     
-    // Phase 2: Synchroniser les fichiers avec la map des dossiers créés
+    // Phase 2: Synchroniser les fichiers avec la map des dossiers créés (Dropbox et Google Drive)
     fastify.post(`${apiPrefix}/rclone/sync`, {
       preValidation: fastify.authenticate
     }, async (request: any, reply) => {
-      logger.info('🔄 SYNC ENDPOINT CALLED');
+      logger.info('🔄 UNIFIED SYNC ENDPOINT CALLED');
       try {
-        const { path: dropboxPath = '', userEmail, driveParentId, folderMap = {} } = request.body;
+        const { path: cloudPath = '', userEmail, driveParentId, folderMap = {}, provider = 'dropbox' } = request.body;
         
         if (!userEmail) {
           return reply.status(400).send({ error: 'userEmail is required' });
@@ -1375,15 +1580,15 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
           return reply.status(400).send({ error: 'driveParentId is required' });
         }
         
-        logger.info(`🚀 Starting file sync for user: ${userEmail}`);
-        logger.info(`📂 Dropbox path: "${dropboxPath}", Drive parent: "${driveParentId}"`);
+        logger.info(`🚀 Starting ${provider.toUpperCase()} sync for user: ${userEmail}`);
+        logger.info(`📂 ${provider.toUpperCase()} path: "${cloudPath}", Drive parent: "${driveParentId}"`);
         logger.info(`📁 Folder map:`, folderMap);
         
         // Créer le contexte d'exécution
         const executionContext = {
-          company: { id: 'af114530-5cc6-11f0-8de8-f78b546249a5' },
+          company: { id: 'c27eaab0-73a3-11f0-b9ef-8519a7f1b5e4' },
           user: { 
-            id: request.user?.id || '4e272180-5cc7-11f0-917c-559ae224df7f',
+            id: request.user?.id || 'c2611090-73a3-11f0-b9ef-8519a7f1b5e4',
             email: userEmail,
             server_request: true,
             application_id: null
@@ -1395,25 +1600,31 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         };
         
         // === LOGIQUE DE SYNCHRONISATION CONDITIONNELLE (comme dans /analyze) ===
-        // Mettre à jour le remote pour cet utilisateur
+        // Mettre à jour le remote pour cet utilisateur selon le provider
         this.currentUserEmail = userEmail;
-        this.REMOTE_NAME = this.getRemoteName(userEmail);
+        let remoteName: string;
         
-        // 1. LISTER DROPBOX CONTENT
-        const remotePath = `${this.REMOTE_NAME}:${dropboxPath}`;
+        if (provider === 'googledrive') {
+          remoteName = this.getGoogleDriveRemoteName(userEmail);
+        } else {
+          remoteName = this.getRemoteName(userEmail); // Dropbox
+        }
+        
+        // 1. LISTER CLOUD CONTENT (Dropbox ou Google Drive)
+        const remotePath = `${remoteName}:${cloudPath}`;
         const listCommand = `rclone lsjson --recursive "${remotePath}"`;
         
         const { stdout } = await execAsync(listCommand);
-        const allDropboxItems = JSON.parse(stdout);
-        const dropboxFolders = allDropboxItems.filter((f: any) => f.IsDir);
-        const dropboxAllFiles = allDropboxItems.filter((f: any) => !f.IsDir);
+        const allCloudItems = JSON.parse(stdout);
+        const cloudFolders = allCloudItems.filter((f: any) => f.IsDir);
+        const cloudAllFiles = allCloudItems.filter((f: any) => !f.IsDir);
         
         // Filtrer pour ne garder que les fichiers à la racine (pas dans des sous-dossiers)
-        const dropboxRootFiles = dropboxAllFiles.filter((f: any) => !f.Path.includes('/'));
+        const cloudRootFiles = cloudAllFiles.filter((f: any) => !f.Path.includes('/'));
         
         // Calculer la taille des dossiers
-        const foldersWithSize = dropboxFolders.map((folder: any) => {
-          const folderFiles = dropboxAllFiles.filter((f: any) => f.Path.startsWith(folder.Path + '/'));
+        const foldersWithSize = cloudFolders.map((folder: any) => {
+          const folderFiles = cloudAllFiles.filter((f: any) => f.Path.startsWith(folder.Path + '/'));
           const totalSize = folderFiles.reduce((sum: number, f: any) => sum + f.Size, 0);
           return {
             name: folder.Name,
@@ -1448,7 +1659,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         const TOLERANCE_KB = 1; // Tolérance de ±1KB
         
         // Filtrer les fichiers à synchroniser
-        const dropboxRootFilesFormatted = dropboxRootFiles.map((f: any) => ({
+        const cloudRootFilesFormatted = cloudRootFiles.map((f: any) => ({
           name: f.Name,
           path: f.Path,
           sizeKB: Math.round(f.Size / 1024)
@@ -1476,7 +1687,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         });
         
         // Analyser les fichiers racine à synchroniser
-        const rootFilesToSync = dropboxRootFilesFormatted.filter((dbFile: any) => {
+        const rootFilesToSync = cloudRootFilesFormatted.filter((dbFile: any) => {
           const matchingFile = myDriveRootFiles.find((mdFile: any) => 
             mdFile.name === dbFile.name // Comparaison stricte
           );
@@ -1499,7 +1710,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         // Ajouter tous les fichiers des dossiers à synchroniser
         const folderFilesToSync: any[] = [];
         for (const folder of foldersToSync) {
-          const folderFiles = dropboxAllFiles.filter((f: any) => f.Path.startsWith(folder.path + '/'));
+          const folderFiles = cloudAllFiles.filter((f: any) => f.Path.startsWith(folder.path + '/'));
           folderFiles.forEach((file: any) => {
             folderFilesToSync.push({
               name: file.Name,
@@ -1525,8 +1736,13 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
           });
         }
         
-        // Synchroniser seulement les fichiers filtrés
-        const result = await this.syncDropboxWithFolderMap(dropboxPath, driveParentId, userEmail, executionContext, folderMap, allFilesToSync);
+        // Synchroniser seulement les fichiers filtrés selon le provider
+        let result;
+        if (provider === 'googledrive') {
+          result = await this.syncGoogleDriveWithFolderMap(cloudPath, driveParentId, userEmail, executionContext, folderMap);
+        } else {
+          result = await this.syncDropboxWithFolderMap(cloudPath, driveParentId, userEmail, executionContext, folderMap, allFilesToSync);
+        }
         
         logger.info(`✅ Sync completed: ${result.message}`);
         return reply.send({
@@ -1544,6 +1760,383 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
       }
     });
     
+    // ========== GOOGLE DRIVE ROUTES ==========
+    
+    // 1) Generate AuthUrl for Google Drive OAuth
+    fastify.get(`/v1/drivers/GoogleDrive`, async (request: any, reply) => {
+      // Récupérer l'email utilisateur depuis les query parameters
+      const userEmail = request.query.userEmail as string || 'default@user.com';
+      logger.info('📧 Email utilisateur reçu pour Google Drive:', userEmail);
+      
+      // Mettre à jour le remote pour cet utilisateur
+      this.currentUserEmail = userEmail;
+      const googleDriveRemoteName = this.getGoogleDriveRemoteName(userEmail);
+      logger.info('🔧 Google Drive Remote name mis à jour:', googleDriveRemoteName);
+      
+      const authUrl = await this.getGoogleDriveAuthUrl(request);
+      logger.info('→ Google Drive AuthUrl generated:', authUrl);
+      // Important: Format exact attendu par le frontend
+      return reply.send({ addition: { AuthUrl: authUrl } });
+    });
+    
+    // 2) OAuth callback for Google Drive
+    fastify.get(`/v1/recover/GoogleDrive`, async (request: any, reply) => {
+      const fullUrl = `${request.protocol}://${request.hostname}${request.url}`;
+      logger.info('🔔 Google Drive Callback received:', fullUrl);
 
+      const code = request.query.code as string | undefined;
+      if (!code) {
+        return reply.status(400).send('❌ Missing code for Google Drive');
+      }
+
+      const params = new URLSearchParams({
+        code: code,
+        grant_type: 'authorization_code',
+        client_id: this.GOOGLE_CLIENT_ID,
+        client_secret: this.GOOGLE_CLIENT_SECRET,
+        redirect_uri: this.PROXY
+      });
+
+      try {
+        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params
+        });
+        
+        const tokenJson = await tokenRes.json();
+        if (!tokenRes.ok) {
+          logger.error('Google Drive Token error:', tokenJson);
+          return reply.status(500).send('Google Drive Token exchange failed');
+        }
+
+        // Create rclone remote pour Google Drive
+        const remoteName = this.getGoogleDriveRemoteName(this.currentUserEmail);
+        
+        const tokenForRclone = JSON.stringify({
+          access_token: tokenJson.access_token,
+          refresh_token: tokenJson.refresh_token,
+          expiry: tokenJson.expires_in ? new Date(Date.now() + tokenJson.expires_in * 1000).toISOString() : undefined
+        });
+        
+        // Créer le remote Google Drive avec rclone
+        const configPath = '/root/.config/rclone/rclone.conf';
+        const deleteCmd = `rclone --config ${configPath} config delete ${remoteName} 2>/dev/null || true`;
+        const createCmd = `rclone --config ${configPath} config create ${remoteName} drive token '${tokenForRclone}' --non-interactive`;
+        
+        exec(`${deleteCmd} && ${createCmd}`, (err, stdout, stderr) => {
+          if (err) {
+            logger.error('Google Drive rclone config failed:', { error: err.message, stderr, stdout });
+          } else {
+            logger.info(`✅ Google Drive Remote "${remoteName}" created in rclone.conf`);
+            logger.info('Google Drive rclone stdout:', stdout);
+          }
+        });
+
+        return reply.send('✅ Google Drive Authentication successful! You may close this window.');
+      } catch (error) {
+        logger.error('Google Drive Exchange error:', error);
+        return reply.status(500).send('Internal Google Drive OAuth error');
+      }
+    });
+    
+    // Note: Google Drive sync now uses the unified /api/v1/rclone/sync endpoint with provider=googledrive
+
+  }
+  
+  /**
+   * Crée récursivement tous les dossiers Google Drive dans Twake Drive
+   * Phase 1 de la synchronisation en 2 temps
+   */
+  private async createGoogleDriveFoldersRecursively(
+    googleDrivePath: string,
+    driveParentId: string,
+    userEmail: string,
+    executionContext: any
+  ): Promise<Record<string, string>> {
+    
+    // Mettre à jour le remote pour cet utilisateur
+    const googleDriveRemoteName = this.getGoogleDriveRemoteName(userEmail);
+    logger.info(`🔧 Using Google Drive remote: ${googleDriveRemoteName}`);
+    
+    const folderMap: Record<string, string> = {};
+    folderMap[''] = driveParentId; // Racine
+    
+    try {
+      // Lister tous les dossiers Google Drive récursivement
+      const remotePath = `${googleDriveRemoteName}:${googleDrivePath}`;
+      const cmd = `rclone lsjson "${remotePath}" --recursive --dirs-only`;
+      
+      logger.info('📁 Listing Google Drive folders recursively:', cmd);
+      
+      const result = await new Promise<string>((resolve, reject) => {
+        exec(cmd, (error, stdout, stderr) => {
+          if (error) {
+            logger.error('❌ Google Drive folder listing failed:', { error: error.message, stderr });
+            reject(error);
+            return;
+          }
+          resolve(stdout);
+        });
+      });
+      
+      const folders = JSON.parse(result || '[]');
+      logger.info(`📂 Found ${folders.length} Google Drive folders`);
+      
+      // Trier les dossiers par profondeur (parents avant enfants)
+      folders.sort((a: any, b: any) => {
+        const depthA = (a.Path || '').split('/').length;
+        const depthB = (b.Path || '').split('/').length;
+        return depthA - depthB;
+      });
+      
+      // Créer chaque dossier dans Twake Drive
+      for (const folder of folders) {
+        const folderPath = folder.Path || '';
+        const folderName = folder.Name || '';
+        
+        // Déterminer le parent
+        const parentPath = path.dirname(folderPath);
+        const parentId = parentPath === '.' ? driveParentId : folderMap[parentPath];
+        
+        if (!parentId) {
+          logger.warn(`⚠️ Parent not found for folder ${folderPath}, skipping`);
+          continue;
+        }
+        
+        try {
+          // Créer le dossier dans Twake Drive
+          const driveItemData = {
+            name: folderName,
+            parent_id: parentId,
+            is_directory: true,
+            scope: 'personal'
+          } as any; // Cast entire object to avoid type error
+          
+          const driveItem = await globalResolver.services.documents.documents.create(
+            driveItemData,
+            null,
+            executionContext,
+            null // Add missing 4th parameter
+          );
+          
+          folderMap[folderPath] = driveItem.id;
+          logger.info(`✅ Created Google Drive folder: ${folderName} (${driveItem.id})`);
+          
+        } catch (error) {
+          logger.error(`❌ Failed to create Google Drive folder ${folderName}:`, error);
+        }
+      }
+      
+      return folderMap;
+      
+    } catch (error) {
+      logger.error('❌ Google Drive folder creation failed:', error);
+      return folderMap;
+    }
+  }
+  
+  /**
+   * Synchronisation Google Drive vers Twake Drive avec map des dossiers préalablement créés
+   * Phase 2 de la synchronisation en 2 temps
+   */
+  private async syncGoogleDriveWithFolderMap(
+    googleDrivePath: string,
+    driveParentId: string,
+    userEmail: string,
+    executionContext: any,
+    folderMap: Record<string, string>, // Map: chemin dossier -> ID dossier Twake
+    filesToSync?: any[] // Liste optionnelle de fichiers filtrés à synchroniser
+  ): Promise<{ success: boolean; message: string; filesProcessed: number }> {
+    
+    // Mettre à jour le remote pour cet utilisateur
+    const googleDriveRemoteName = this.getGoogleDriveRemoteName(userEmail);
+    logger.info(`🔧 Using Google Drive remote: ${googleDriveRemoteName}`);
+    
+    try {
+      // 1. Lister tous les fichiers Google Drive récursivement
+      let files: any[];
+      
+      if (filesToSync && filesToSync.length > 0) {
+        // Utiliser les fichiers filtrés passés en paramètre
+        logger.info(`📋 Using filtered files list: ${filesToSync.length} files`);
+        files = filesToSync.map((f: any) => ({
+          Path: f.path,
+          Name: f.name,
+          Size: f.size,
+          ModTime: f.modified_at,
+          IsDir: f.is_directory,
+          MimeType: f.mime_type
+        }));
+      } else {
+        // Lister tous les fichiers Google Drive récursivement
+        const remotePath = `${googleDriveRemoteName}:${googleDrivePath}`;
+        const cmd = `rclone lsjson "${remotePath}" --recursive --files-only`;
+        
+        logger.info('📁 Listing Google Drive files recursively:', cmd);
+        
+        const result = await new Promise<string>((resolve, reject) => {
+          exec(cmd, (error, stdout, stderr) => {
+            if (error) {
+              logger.error('❌ Google Drive file listing failed:', { error: error.message, stderr });
+              reject(error);
+              return;
+            }
+            resolve(stdout);
+          });
+        });
+        
+        files = JSON.parse(result || '[]');
+      }
+      
+      logger.info(`📂 Found ${files.length} Google Drive files to sync`);
+      
+      let filesProcessed = 0;
+      const BATCH_SIZE = 10;
+      
+      // Traiter les fichiers par batch
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+        
+        await Promise.all(batch.map(async (file: any) => {
+          try {
+            await this.saveGoogleDriveFileToTwakeDrive(
+              file,
+              googleDrivePath,
+              googleDriveRemoteName,
+              folderMap,
+              executionContext
+            );
+            filesProcessed++;
+          } catch (error) {
+            logger.error(`❌ Failed to sync Google Drive file ${file.Name}:`, error);
+          }
+        }));
+        
+        // Log progress
+        logger.info(`📈 Google Drive sync progress: ${Math.min(i + BATCH_SIZE, files.length)}/${files.length}`);
+      }
+      
+      return {
+        success: true,
+        message: `Successfully synced ${filesProcessed}/${files.length} Google Drive files`,
+        filesProcessed
+      };
+      
+    } catch (error) {
+      logger.error('❌ Google Drive sync failed:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Sauvegarde un fichier Google Drive dans Twake Drive
+   */
+  private async saveGoogleDriveFileToTwakeDrive(
+    file: any,
+    googleDrivePath: string,
+    googleDriveRemoteName: string,
+    folderMap: Record<string, string>,
+    executionContext: any
+  ): Promise<void> {
+    
+    const fileName = file.Name;
+    const filePath = file.Path;
+    const fileSize = file.Size || 0;
+    
+    // Déterminer le dossier parent
+    const parentPath = path.dirname(filePath);
+    const driveParentId = parentPath === '.' ? folderMap[''] : folderMap[parentPath];
+    
+    if (!driveParentId) {
+      logger.warn(`⚠️ Parent folder not found for Google Drive file ${filePath}, skipping`);
+      return;
+    }
+    
+    try {
+      // Télécharger le fichier depuis Google Drive
+      const remotePath = `${googleDriveRemoteName}:${googleDrivePath}${googleDrivePath ? '/' : ''}${filePath}`;
+      const downloadCmd = `rclone cat "${remotePath}"`;
+      
+      logger.info(`📎 Downloading Google Drive file: ${fileName}`);
+      
+      const fileBuffer = await new Promise<Buffer>((resolve, reject) => {
+        exec(downloadCmd, { encoding: 'buffer', maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
+          if (error) {
+            logger.error(`❌ Google Drive download failed for ${fileName}:`, { error: error.message, stderr });
+            reject(error);
+            return;
+          }
+          resolve(stdout as Buffer);
+        });
+      });
+      
+      // Déterminer le type MIME
+      const mimeType = file.MimeType || 'application/octet-stream';
+      
+      // Créer le fichier dans Twake Drive
+      const uploadOptions = {
+        filename: fileName,
+        totalSize: fileBuffer.length,
+        totalChunks: 1,
+        chunkNumber: 0,
+        type: mimeType,
+        name: fileName,
+        ignoreThumbnails: true,
+        waitForThumbnail: false
+      } as any; // Cast to avoid type error
+      
+      const context = executionContext; // Use the existing execution context
+      
+      // Convert Buffer to Readable stream
+      const { Readable } = require('stream');
+      const fileStream = new Readable({
+        read() {
+          this.push(fileBuffer);
+          this.push(null);
+        }
+      });
+      
+      const savedFile = await globalResolver.services.files.save(
+        null, // No existing file ID
+        fileStream,
+        uploadOptions,
+        context,
+      );
+      
+      // Créer l'item drive
+      const driveItemData = {
+        name: fileName,
+        parent_id: driveParentId,
+        is_directory: false,
+        scope: 'personal' as any // Cast to avoid type error
+      };
+      
+      const versionData = {
+        drive_item_id: '',
+        creator_id: executionContext.user.id,
+        file_metadata: {
+          external_id: savedFile.id,
+          name: fileName,
+          mime: mimeType,
+          size: fileBuffer.length,
+          thumbnails: savedFile.thumbnails || [],
+        },
+      };
+      
+      // Create the drive item using the documents service
+      const driveItem = await globalResolver.services.documents.documents.create(
+        savedFile,
+        driveItemData,
+        versionData,
+        executionContext,
+      );
+      
+      logger.info(`✅ Google Drive item created: ${driveItem.id} (${fileName}) in folder ${driveParentId}`);
+      
+    } catch (error) {
+      logger.error(`❌ Failed to save Google Drive file ${fileName} to Twake Drive:`, error);
+      throw error;
+    }
   }
 }
