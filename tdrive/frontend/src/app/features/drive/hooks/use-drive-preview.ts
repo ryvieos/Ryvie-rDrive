@@ -19,10 +19,22 @@ export const useDrivePreviewModal = () => {
   );
 
   const open: (item: DriveItem) => void = (item: DriveItem) => {
-    if (item.last_version_cache?.file_metadata?.source === 'internal') {
+    // Permettre la prévisualisation SEULEMENT pour les fichiers synchronisés (stockés localement)
+    if (!item.is_directory && (
+      item.last_version_cache?.file_metadata?.source === 'internal' ||
+      item.last_version_cache?.provider === 'internal'
+    )) {
       setStatus({ item, loading: true });
     } else if (item.is_directory){
       setParentId(item.id);
+    } else if (!item.is_directory && (
+      item.last_version_cache?.file_metadata?.source === 'googledrive' ||
+      item.last_version_cache?.file_metadata?.source === 'dropbox' ||
+      item.last_version_cache?.provider === 'googledrive' ||
+      item.last_version_cache?.provider === 'dropbox'
+    )) {
+      // Afficher un message pour les fichiers non-synchronisés
+      console.log('Fichier non-synchronisé - prévisualisation non disponible. Synchronisez d\'abord ce fichier.');
     }
   };
 

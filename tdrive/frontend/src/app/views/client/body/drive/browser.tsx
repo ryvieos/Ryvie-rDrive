@@ -45,7 +45,7 @@ import { DndContext, useSensors, useSensor, PointerSensor, DragOverlay } from '@
 import { Droppable } from 'app/features/dragndrop/hook/droppable';
 import { Draggable } from 'app/features/dragndrop/hook/draggable';
 import { useDriveActions } from '@features/drive/hooks/use-drive-actions';
-import { useCloudImport } from '@features/drive/hooks/use-dropbox-import';
+import { useCloudImport } from '@features/drive/hooks/use-cloud-import';
 import { ConfirmModalAtom } from './modals/confirm-move/index';
 import { useCurrentUser } from 'app/features/users/hooks/use-current-user';
 import { ToasterService } from '@features/global/services/toaster-service';

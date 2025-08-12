@@ -19,8 +19,7 @@ import FeatureTogglesService, {
 } from '@features/global/services/feature-toggles-service';
 import Logger from '@features/global/framework/logger-service';
 import jwtStorageService from '@features/auth/jwt-storage-service';
-import { useDropboxFiles } from './use-dropbox-files';
-import { useGoogleDriveFiles } from './use-googledrive-files';
+import { useCloudFiles } from './use-cloud-files';
 
 /**
  * Returns the children of a drive item
@@ -33,8 +32,7 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
   const [paginateItem] = useRecoilState(DriveItemPagination);
   const { getQuota } = useUserQuota();
   const AVEnabled = FeatureTogglesService.isActiveFeatureName(FeatureNames.COMPANY_AV_ENABLED);
-  const { refreshDropboxFiles } = useDropboxFiles();
-  const { refreshGoogleDriveFiles } = useGoogleDriveFiles();
+  const { refreshDropboxFiles, refreshGoogleDriveFiles } = useCloudFiles();
 
   /**
    * Downloads a file from the given URL, ensuring compatibility across all browsers, including Safari.
