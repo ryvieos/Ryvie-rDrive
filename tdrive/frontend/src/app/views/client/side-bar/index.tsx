@@ -29,6 +29,7 @@ import FeatureTogglesService, {
   FeatureNames,
 } from '@features/global/services/feature-toggles-service';
 import Api from '@features/global/framework/api-service';
+import JWTStorage from '@features/auth/jwt-storage-service';
 
 
 export default () => {
@@ -90,6 +91,72 @@ export default () => {
   if (inTrash) folderType = 'trash';
   if (sharedWithMe) folderType = 'shared';
   const [connectingDropbox, setConnectingDropbox] = useState(false);
+  const [connectingGoogleDrive, setConnectingGoogleDrive] = useState(false);
+  const [dropboxConnected, setDropboxConnected] = useState(false);
+  const [googleDriveConnected, setGoogleDriveConnected] = useState(false);
+  
+  // Détecter l'état de connexion basé sur la navigation et localStorage
+  useEffect(() => {
+    // Vérification réelle de la connexion backend pour chaque provider
+    const checkRealConnections = async () => {
+      if (!user?.email) return;
+      
+      const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
+      const userEmail = encodeURIComponent(user.email);
+      
+      // Vérifier Dropbox
+      try {
+        console.log('🔍 Vérification connexion Dropbox...');
+        const dropboxResponse = await fetch(`${backendUrl}/api/v1/files/rclone/list?path=&userEmail=${userEmail}&provider=dropbox`, {
+          headers: {
+            'Authorization': JWTStorage.getAutorizationHeader(),
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (dropboxResponse.ok) {
+          console.log('✅ Dropbox connecté et fonctionnel');
+          setDropboxConnected(true);
+          localStorage.setItem('dropbox_connected', 'true');
+        } else {
+          console.warn('❌ Dropbox non accessible, nettoyage du cache');
+          setDropboxConnected(false);
+          localStorage.removeItem('dropbox_connected');
+        }
+      } catch (error) {
+        console.error('❌ Erreur vérification Dropbox:', error);
+        setDropboxConnected(false);
+        localStorage.removeItem('dropbox_connected');
+      }
+      
+      // Vérifier Google Drive
+      try {
+        console.log('🔍 Vérification connexion Google Drive...');
+        const googleResponse = await fetch(`${backendUrl}/api/v1/files/rclone/list?path=&userEmail=${userEmail}&provider=googledrive`, {
+          headers: {
+            'Authorization': JWTStorage.getAutorizationHeader(),
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (googleResponse.ok) {
+          console.log('✅ Google Drive connecté et fonctionnel');
+          setGoogleDriveConnected(true);
+          localStorage.setItem('googledrive_connected', 'true');
+        } else {
+          console.warn('❌ Google Drive non accessible, nettoyage du cache');
+          setGoogleDriveConnected(false);
+          localStorage.removeItem('googledrive_connected');
+        }
+      } catch (error) {
+        console.error('❌ Erreur vérification Google Drive:', error);
+        setGoogleDriveConnected(false);
+        localStorage.removeItem('googledrive_connected');
+      }
+    };
+    
+    checkRealConnections();
+  }, [user?.email]);
 
 
 
@@ -210,6 +277,7 @@ export default () => {
           {Languages.t('components.side_menu.trash')}
         </Button>
 
+        {/* Bouton Dropbox dynamique */}
         <Button
           onClick={async () => {
             if (!user) {
@@ -217,39 +285,44 @@ export default () => {
               return;
             }
 
-            setConnectingDropbox(true);
-            try {
-              console.log('🔗 Connexion Dropbox pour l\'utilisateur:', user);
-              
-              // Construire l'URL du backend dynamiquement avec les informations utilisateur
-              const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
-              const userEmail = encodeURIComponent(user.email);
-              const response = await fetch(`${backendUrl}/v1/drivers/Dropbox?userEmail=${userEmail}`);
-              
-              console.log('📤 Requête envoyée avec userEmail:', user.email);
-              
-              if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            if (dropboxConnected) {
+              // Si connecté, naviguer vers My Dropbox
+              setParentId('dropbox_root');
+              history.push(`/client/${company}/v/dropbox_root`);
+            } else {
+              // Si pas connecté, initier la connexion OAuth
+              setConnectingDropbox(true);
+              try {
+                console.log('🔗 Connexion Dropbox pour l\'utilisateur:', user);
+                
+                const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
+                const userEmail = encodeURIComponent(user.email);
+                const response = await fetch(`${backendUrl}/v1/drivers/Dropbox?userEmail=${userEmail}`);
+                
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data && data.addition && data.addition.AuthUrl) {
+                  console.log('🔀 Redirection vers Dropbox OAuth:', data.addition.AuthUrl);
+                  // Marquer comme connecté après redirection OAuth réussie
+                  localStorage.setItem('dropbox_connected', 'true');
+                  window.location.href = data.addition.AuthUrl;
+                } else {
+                  throw new Error('Invalid response format');
+                }
+              } catch (e) {
+                console.error('Dropbox connection error:', e);
+                setConnectingDropbox(false);
               }
-              
-              const data = await response.json();
-              console.log('✅ Réponse du backend Dropbox:', data);
-              
-              if (data && data.addition && data.addition.AuthUrl) {
-                console.log('🔀 Redirection vers Dropbox OAuth:', data.addition.AuthUrl);
-                window.location.href = data.addition.AuthUrl;
-              } else {
-                throw new Error('Invalid response format');
-              }
-            } catch (e) {
-              console.error('Dropbox connection error:', e);
-              setConnectingDropbox(false);
             }
           }}
           size="lg"
           theme="white"
-          className="w-full mb-1"
-          testClassId="sidebar-dropbox-connect"
+          className={`w-full mb-1 ${dropboxConnected && (parentId === 'dropbox_root' || parentId.startsWith('dropbox_')) ? activeClass : ''}`}
+          testClassId={dropboxConnected ? "sidebar-dropbox-browse" : "sidebar-dropbox-connect"}
           disabled={connectingDropbox}
         >
           <img 
@@ -258,29 +331,71 @@ export default () => {
             className="w-5 h-5 mr-4"
           />
           {connectingDropbox 
-            ? Languages.t('drive.dropbox.redirecting') 
-            : Languages.t('drive.dropbox.connect_button')}
+            ? 'Redirecting to Dropbox...' 
+            : dropboxConnected 
+              ? 'My Dropbox' 
+              : 'Connect your Dropbox'}
         </Button>
 
+        {/* Bouton Google Drive dynamique */}
         <Button
-          onClick={() => {
-            setParentId('dropbox_root');
-            history.push(`/client/${company}/v/dropbox_root`);
+          onClick={async () => {
+            if (!user) {
+              alert('Aucun utilisateur connecté');
+              return;
+            }
+
+            if (googleDriveConnected) {
+              // Si connecté, naviguer vers My Google Drive
+              setParentId('googledrive_root');
+              history.push(`/client/${company}/v/googledrive_root`);
+            } else {
+              // Si pas connecté, initier la connexion OAuth
+              setConnectingGoogleDrive(true);
+              try {
+                console.log('🔗 Connexion Google Drive pour l\'utilisateur:', user);
+                
+                const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
+                const userEmail = encodeURIComponent(user.email);
+                const response = await fetch(`${backendUrl}/v1/drivers/GoogleDrive?userEmail=${userEmail}`);
+                
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data && data.addition && data.addition.AuthUrl) {
+                  console.log('🔀 Redirection vers Google Drive OAuth:', data.addition.AuthUrl);
+                  // Marquer comme connecté après redirection OAuth réussie
+                  localStorage.setItem('googledrive_connected', 'true');
+                  window.location.href = data.addition.AuthUrl;
+                } else {
+                  throw new Error('Invalid response format');
+                }
+              } catch (e) {
+                console.error('Google Drive connection error:', e);
+                setConnectingGoogleDrive(false);
+              }
+            }
           }}
           size="lg"
           theme="white"
-          className={`w-full mb-1 ${parentId === 'dropbox_root' || parentId.startsWith('dropbox_') ? activeClass : ''}`}
-          testClassId="sidebar-dropbox-browse"
+          className={`w-full mb-1 ${googleDriveConnected && (parentId === 'googledrive_root' || parentId.startsWith('googledrive_')) ? activeClass : ''}`}
+          testClassId={googleDriveConnected ? "sidebar-googledrive-browse" : "sidebar-googledrive-connect"}
+          disabled={connectingGoogleDrive}
         >
           <img 
-            src="https://cfl.dropboxstatic.com/static/images/favicon-vfl8lUR9B.ico" 
-            alt="Dropbox" 
+            src="https://ssl.gstatic.com/docs/doclist/images/drive_2022q3_32dp.png" 
+            alt="Google Drive" 
             className="w-5 h-5 mr-4"
           />
-          My Dropbox
+          {connectingGoogleDrive 
+            ? 'Redirecting to Google Drive...' 
+            : googleDriveConnected 
+              ? 'My Google Drive' 
+              : 'Connect your Google Drive'}
         </Button>
-
-
 
         {false && (
           <>

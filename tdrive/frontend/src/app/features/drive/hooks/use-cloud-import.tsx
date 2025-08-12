@@ -8,17 +8,17 @@ import Logger from '@features/global/framework/logger-service';
 import FileUploadService from '@features/files/services/file-upload-service';
 import JWTStorage from '@features/auth/jwt-storage-service';
 
-const logger = Logger.getLogger('DropboxImportHook');
+const logger = Logger.getLogger('CloudImportHook');
 
-export interface DropboxImportOptions {
+export interface CloudImportOptions {
   targetFolderId?: string;
   overwrite?: boolean;
 }
 
 /**
- * Hook pour importer les fichiers Dropbox vers le disque local
+ * Hook pour importer les fichiers Dropbox ou Google Drive vers le disque local
  */
-export const useDropboxImport = () => {
+export const useCloudImport = () => {
   const { user } = useCurrentUser();
   const company = useRouterCompany();
   const { refresh } = useDriveActions();
@@ -258,15 +258,16 @@ const downloadUrl = `${backendUrl}/api/v1/files/rclone/download?path=${safePath}
   }, [importDropboxFile]);
 
   /**
-   * Synchronise un dossier entier depuis Dropbox vers Twake Drive en 2 phases
+   * Synchronise un dossier entier depuis Dropbox ou Google Drive vers Twake Drive en 2 phases
    * Phase 1: Analyse de l'arborescence et création des dossiers
    * Phase 2: Synchronisation des fichiers
    */
   const importDropboxFolder = useCallback(async (
     dropboxPath: string,
     targetFolderId: string,
-    options: DropboxImportOptions = {}
+    options: { provider?: 'dropbox' | 'googledrive' } = {}
   ): Promise<void> => {
+    const provider = options.provider || 'dropbox';
     if (!user?.email) {
       throw new Error('Utilisateur non connecté');
     }
@@ -280,10 +281,10 @@ const downloadUrl = `${backendUrl}/api/v1/files/rclone/download?path=${safePath}
     setImportProgress({ current: 0, total: 0, currentFile: 'Initialisation de la synchronisation...' });
 
     try {
-      logger.info(`🚀 Starting 2-phase Dropbox sync from ${dropboxPath} to ${targetFolderId}`);
+      logger.info(`🚀 Starting 2-phase ${provider.toUpperCase()} sync from ${dropboxPath} to ${targetFolderId}`);
       
       // === PHASE 1: Analyse de l'arborescence ===
-      setImportProgress({ current: 0, total: 0, currentFile: 'Analyse de l\'arborescence Dropbox...' });
+      setImportProgress({ current: 0, total: 0, currentFile: `Analyse de l'arborescence ${provider.toUpperCase()}...` });
       
       const analyzeResponse = await fetch(`${backendUrl}/api/v1/rclone/analyze`, {
         method: 'POST',
@@ -294,7 +295,8 @@ const downloadUrl = `${backendUrl}/api/v1/files/rclone/download?path=${safePath}
         body: JSON.stringify({
           path: dropboxPath,
           userEmail: user.email,
-          driveParentId: targetFolderId
+          driveParentId: targetFolderId,
+          provider: provider
         })
       });
       
@@ -313,14 +315,14 @@ const downloadUrl = `${backendUrl}/api/v1/files/rclone/download?path=${safePath}
       if (analyzeData.diagnostic) {
         const { dropbox, myDrive } = analyzeData.diagnostic;
         
-        console.log('\n📊 === DIAGNOSTIC DROPBOX vs MyDrive (AVANT SYNC) ===');
+        console.log(`\n📊 === DIAGNOSTIC ${provider.toUpperCase()} vs MyDrive (AVANT SYNC) ===`);
         
-        console.log('\n📁 DROPBOX FOLDERS:');
+        console.log(`\n📁 ${provider.toUpperCase()} FOLDERS:`);
         dropbox.folders.forEach((folder: any) => {
           console.log(`  📁 ${folder.name} - ${folder.sizeKB} KB`);
         });
         
-        console.log('\n📄 DROPBOX FILES (racine uniquement):');
+        console.log(`\n📄 ${provider.toUpperCase()} FILES (racine uniquement):`);
         dropbox.files.forEach((file: any) => {
           console.log(`  📄 ${file.name} - ${file.sizeKB} KB`);
         });
@@ -336,7 +338,7 @@ const downloadUrl = `${backendUrl}/api/v1/files/rclone/download?path=${safePath}
         });
         
         console.log('\n📊 SUMMARY:');
-        console.log(`  Dropbox: ${dropbox.files.length} files, ${dropbox.folders.length} folders`);
+        console.log(`  ${provider.toUpperCase()}: ${dropbox.files.length} files, ${dropbox.folders.length} folders`);
         console.log(`  MyDrive: ${myDrive.files.length} files, ${myDrive.folders.length} folders`);
         
         // Afficher les éléments à synchroniser
@@ -362,7 +364,7 @@ const downloadUrl = `${backendUrl}/api/v1/files/rclone/download?path=${safePath}
         // Afficher aussi dans un toast pour l'utilisateur
         const syncCount = analyzeData.diagnostic.toSync ? 
           analyzeData.diagnostic.toSync.folders.length + analyzeData.diagnostic.toSync.files.length : 0;
-        ToasterService.info(`📊 Diagnostic: ${syncCount} éléments à synchroniser | Dropbox ${dropbox.files.length} fichiers, ${dropbox.folders.length} dossiers`);
+        ToasterService.info(`📊 Diagnostic: ${syncCount} éléments à synchroniser | ${provider.toUpperCase()} ${dropbox.files.length} fichiers, ${dropbox.folders.length} dossiers`);
         
         // Si rien à synchroniser, arrêter ici
         if (syncCount === 0) {
@@ -377,7 +379,7 @@ const downloadUrl = `${backendUrl}/api/v1/files/rclone/download?path=${safePath}
       // === PHASE 2: Création des dossiers (seulement ceux à synchroniser) ===
       
       // Filtrer les dossiers à créer selon le diagnostic conditionnel
-      const foldersToSync = analyzeData.diagnostic.toSync?.folders || [];
+      const foldersToSync = analyzeData.diagnostic?.toSync?.folders || [];
       const foldersToSyncPaths = foldersToSync.map((f: any) => f.path || f.name);
       const filteredFoldersToCreate = foldersToCreate.filter((folderPath: string) => {
         // Créer le dossier si lui-même ou un de ses parents est à synchroniser
@@ -455,7 +457,8 @@ const downloadUrl = `${backendUrl}/api/v1/files/rclone/download?path=${safePath}
           path: dropboxPath,
           userEmail: user.email,
           driveParentId: targetFolderId,
-          folderMap: folderMap
+          folderMap: folderMap,
+          provider: provider
         })
       });
       
@@ -501,7 +504,6 @@ const downloadUrl = `${backendUrl}/api/v1/files/rclone/download?path=${safePath}
   return {
     importing,
     importProgress,
-    getDropboxFiles,
     importDropboxFolder
   };
 };

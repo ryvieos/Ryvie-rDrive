@@ -19,7 +19,7 @@ import FeatureTogglesService, {
 } from '@features/global/services/feature-toggles-service';
 import Logger from '@features/global/framework/logger-service';
 import jwtStorageService from '@features/auth/jwt-storage-service';
-import { useDropboxFiles } from './use-dropbox-files';
+import { useCloudFiles } from './use-cloud-files';
 
 /**
  * Returns the children of a drive item
@@ -32,7 +32,7 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
   const [paginateItem] = useRecoilState(DriveItemPagination);
   const { getQuota } = useUserQuota();
   const AVEnabled = FeatureTogglesService.isActiveFeatureName(FeatureNames.COMPANY_AV_ENABLED);
-  const { refreshDropboxFiles } = useDropboxFiles();
+  const { refreshDropboxFiles, refreshGoogleDriveFiles } = useCloudFiles();
 
   /**
    * Downloads a file from the given URL, ensuring compatibility across all browsers, including Safari.
@@ -123,8 +123,8 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
       async (parentId: string, resetPagination?: boolean) => {
         if (parentId) {
           // Détecter si c'est un identifiant Dropbox
-          if (parentId.startsWith('dropbox_') || parentId === 'dropbox_root') {
-            let dropboxPath = '';
+          if (parentId.startsWith('dropbox_')) {
+            let dropboxPath;
             if (parentId === 'dropbox_root') {
               dropboxPath = '';
             } else {
@@ -132,6 +132,18 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
               dropboxPath = parentId.replace('dropbox_', '');
             }
             return await refreshDropboxFiles(dropboxPath);
+          }
+          
+          // Gestion spéciale pour Google Drive
+          if (parentId.startsWith('googledrive_')) {
+            let googleDrivePath;
+            if (parentId === 'googledrive_root') {
+              googleDrivePath = '';
+            } else {
+              // Extraire le chemin en supprimant le préfixe 'googledrive_'
+              googleDrivePath = parentId.replace('googledrive_', '');
+            }
+            return await refreshGoogleDriveFiles(googleDrivePath);
           }
           
           const filter: BrowseFilter = {
@@ -454,7 +466,7 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
     ({ snapshot }) =>
       async (parentId: string) => {
         // Vérifier si c'est un dossier Dropbox
-        if (parentId.startsWith('dropbox_') || parentId === 'dropbox_root') {
+        if (parentId.startsWith('dropbox_')) {
           let dropboxPath: string;
           if (parentId === 'dropbox_root') {
             dropboxPath = '';
@@ -463,6 +475,18 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
             dropboxPath = parentId.replace('dropbox_', '');
           }
           return await refreshDropboxFiles(dropboxPath);
+        }
+        
+        // Vérifier si c'est un dossier Google Drive
+        if (parentId.startsWith('googledrive_')) {
+          let googleDrivePath: string;
+          if (parentId === 'googledrive_root') {
+            googleDrivePath = '';
+          } else {
+            // Extraire le chemin en supprimant le préfixe 'googledrive_'
+            googleDrivePath = parentId.replace('googledrive_', '');
+          }
+          return await refreshGoogleDriveFiles(googleDrivePath);
         }
         
         // Utiliser l'API standard pour les autres dossiers
@@ -480,7 +504,7 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
         );
         return details;
       },
-    [paginateItem, refresh, refreshDropboxFiles],
+    [paginateItem, refresh, refreshDropboxFiles, refreshGoogleDriveFiles],
   );
 
   const checkMalware = useCallback(

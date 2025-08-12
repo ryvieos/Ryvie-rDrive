@@ -19,10 +19,26 @@ export const useDrivePreviewModal = () => {
   );
 
   const open: (item: DriveItem) => void = (item: DriveItem) => {
-    if (item.last_version_cache?.file_metadata?.source === 'internal') {
-      setStatus({ item, loading: true });
-    } else if (item.is_directory){
+    if (item.is_directory) {
+      // Naviguer vers le dossier
       setParentId(item.id);
+    } else {
+      // Pour les fichiers, vérifier s'ils sont prévisualisables
+      const source = item.last_version_cache?.file_metadata?.source;
+      const provider = item.last_version_cache?.provider;
+      
+      // Bloquer SEULEMENT les fichiers cloud non-synchronisés (source/provider = dropbox/googledrive)
+      if (source === 'googledrive' || source === 'dropbox' || 
+          provider === 'googledrive' || provider === 'dropbox') {
+        // Fichier cloud non-synchronisé - pas de prévisualisation
+        console.log('Fichier non-synchronisé - prévisualisation non disponible. Synchronisez d\'abord ce fichier.');
+        return;
+      }
+      
+      // Permettre la prévisualisation pour :
+      // - Les fichiers uploadés normalement (pas de source/provider ou source='internal')
+      // - Les fichiers synchronisés (source='internal' ou provider='internal')
+      setStatus({ item, loading: true });
     }
   };
 
