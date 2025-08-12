@@ -1030,7 +1030,9 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         });
 
         // Redirection automatique vers rdrive après authentification réussie
-        const redirectUrl = `${request.protocol}://${request.hostname}:3000/client`;
+        // Extraire le hostname sans port pour éviter les URLs malformées
+        const hostname = request.hostname.split(':')[0];
+        const redirectUrl = `${request.protocol}://${hostname}:3000/client`;
         logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);
         
         // Envoyer une page HTML avec redirection automatique
@@ -1725,7 +1727,9 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         });
 
         // Redirection automatique vers rdrive après authentification réussie
-        const redirectUrl = `${request.protocol}://${request.hostname}:3000/client`;
+        // Extraire le hostname sans port pour éviter les URLs malformées
+        const hostname = request.hostname.split(':')[0];
+        const redirectUrl = `${request.protocol}://${hostname}:3000/client`;
         logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);
         
         // Envoyer une page HTML avec redirection automatique
