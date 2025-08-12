@@ -97,26 +97,65 @@ export default () => {
   
   // Détecter l'état de connexion basé sur la navigation et localStorage
   useEffect(() => {
-    // Méthode simplifiée : vérifier si l'utilisateur a déjà navigué vers ces sections
-    // ou s'il y a des tokens/credentials stockés localement
-    
-    // Pour l'instant, on assume qu'ils sont connectés s'ils peuvent naviguer vers ces sections
-    // Cette logique peut être améliorée plus tard avec une vraie vérification backend
-    const checkStoredConnections = () => {
-      // Vérifier si l'utilisateur a déjà utilisé ces providers (localStorage, sessionStorage, etc.)
-      const hasDropboxHistory = localStorage.getItem('dropbox_connected') === 'true';
-      const hasGoogleDriveHistory = localStorage.getItem('googledrive_connected') === 'true';
+    // Vérification réelle de la connexion backend pour chaque provider
+    const checkRealConnections = async () => {
+      if (!user?.email) return;
       
-      setDropboxConnected(hasDropboxHistory);
-      setGoogleDriveConnected(hasGoogleDriveHistory);
+      const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
+      const userEmail = encodeURIComponent(user.email);
       
-      console.log('🔍 Connection status from storage:', { 
-        dropbox: hasDropboxHistory, 
-        googledrive: hasGoogleDriveHistory 
-      });
+      // Vérifier Dropbox
+      try {
+        console.log('🔍 Vérification connexion Dropbox...');
+        const dropboxResponse = await fetch(`${backendUrl}/api/v1/files/rclone/list?path=&userEmail=${userEmail}&provider=dropbox`, {
+          headers: {
+            'Authorization': JWTStorage.getAutorizationHeader(),
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (dropboxResponse.ok) {
+          console.log('✅ Dropbox connecté et fonctionnel');
+          setDropboxConnected(true);
+          localStorage.setItem('dropbox_connected', 'true');
+        } else {
+          console.warn('❌ Dropbox non accessible, nettoyage du cache');
+          setDropboxConnected(false);
+          localStorage.removeItem('dropbox_connected');
+        }
+      } catch (error) {
+        console.error('❌ Erreur vérification Dropbox:', error);
+        setDropboxConnected(false);
+        localStorage.removeItem('dropbox_connected');
+      }
+      
+      // Vérifier Google Drive
+      try {
+        console.log('🔍 Vérification connexion Google Drive...');
+        const googleResponse = await fetch(`${backendUrl}/api/v1/files/rclone/list?path=&userEmail=${userEmail}&provider=googledrive`, {
+          headers: {
+            'Authorization': JWTStorage.getAutorizationHeader(),
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (googleResponse.ok) {
+          console.log('✅ Google Drive connecté et fonctionnel');
+          setGoogleDriveConnected(true);
+          localStorage.setItem('googledrive_connected', 'true');
+        } else {
+          console.warn('❌ Google Drive non accessible, nettoyage du cache');
+          setGoogleDriveConnected(false);
+          localStorage.removeItem('googledrive_connected');
+        }
+      } catch (error) {
+        console.error('❌ Erreur vérification Google Drive:', error);
+        setGoogleDriveConnected(false);
+        localStorage.removeItem('googledrive_connected');
+      }
     };
     
-    checkStoredConnections();
+    checkRealConnections();
   }, [user?.email]);
 
 

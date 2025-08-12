@@ -351,8 +351,29 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
    * REMPLACE listFiles ET listGoogleDriveFiles
    */
   public async listCloudFiles(path: string, provider: 'dropbox' | 'googledrive', remoteName?: string): Promise<any[]> {
-    const actualRemoteName = remoteName || (provider === 'googledrive' ? this.getGoogleDriveRemoteName(this.currentUserEmail) : this.REMOTE_NAME);
+    // CORRECTION CRITIQUE : Générer le bon remote pour chaque provider
+    let actualRemoteName: string;
+    if (remoteName) {
+      actualRemoteName = remoteName;
+    } else if (provider === 'googledrive') {
+      actualRemoteName = this.getGoogleDriveRemoteName(this.currentUserEmail);
+    } else {
+      // Pour Dropbox, utiliser la méthode getRemoteName au lieu de this.REMOTE_NAME
+      actualRemoteName = this.getRemoteName(this.currentUserEmail);
+    }
+    
     logger.info(`📁 Listing ${provider} files at path: ${path} with remote: ${actualRemoteName}`);
+    
+    // Debug: Log détaillé des remotes utilisés
+    console.log(`🔍 BACKEND DEBUG FIXED:`, {
+      provider,
+      path,
+      requestedRemoteName: remoteName,
+      actualRemoteName,
+      dropboxRemote: this.getRemoteName(this.currentUserEmail),
+      googleDriveRemote: this.getGoogleDriveRemoteName(this.currentUserEmail),
+      currentUserEmail: this.currentUserEmail
+    });
     
     return new Promise(async (resolve, reject) => {
       const remotePath = `${actualRemoteName}:${path}`;
@@ -378,7 +399,15 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
 
         try {
           const files = JSON.parse(stdout || '[]');
-          logger.info(`✅ Parsed ${provider} files count:`, files.length);
+          logger.info(`📊 ${provider} found ${files.length} files/folders`);
+          
+          // Debug: Log des fichiers retournés par rclone
+          console.log(`📋 RCLONE RETURNED FOR ${provider}:`, {
+            provider,
+            actualRemoteName,
+            fileCount: files.length,
+            files: files.map(f => ({ name: f.Name, isDir: f.IsDir, size: f.Size }))
+          });
           
           // Sauvegarder temporairement REMOTE_NAME pour approximateFolderSize
           const previousRemoteName = this.REMOTE_NAME;
@@ -409,7 +438,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
             };
           }));
           
-          // Restaurer REMOTE_NAME
+          // Restaurer REMOTE_NAME AVANT de résoudre
           this.REMOTE_NAME = previousRemoteName;
           
           resolve(transformedFiles);
@@ -1000,7 +1029,40 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
           }
         });
 
-        return reply.send('✅ Authentication successful! You may close this window.');
+        // Redirection automatique vers rdrive après authentification réussie
+        const redirectUrl = `${request.protocol}://${request.hostname}:3000/client`;
+        logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);
+        
+        // Envoyer une page HTML avec redirection automatique
+        const htmlResponse = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Dropbox Authentication Successful</title>
+            <meta charset="utf-8">
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+              .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
+              .success { color: #28a745; font-size: 18px; margin-bottom: 20px; }
+              .redirect { color: #6c757d; font-size: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="success">✅ Dropbox Authentication Successful!</div>
+              <div class="redirect">Redirecting to rdrive...</div>
+            </div>
+            <script>
+              // Redirection automatique après 2 secondes
+              setTimeout(() => {
+                window.location.href = '${redirectUrl}';
+              }, 2000);
+            </script>
+          </body>
+          </html>
+        `;
+        
+        return reply.type('text/html').send(htmlResponse);
       } catch (error) {
         logger.error('Exchange error:', error);
         return reply.status(500).send('Internal OAuth error');
@@ -1662,7 +1724,40 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
           }
         });
 
-        return reply.send('✅ Google Drive Authentication successful! You may close this window.');
+        // Redirection automatique vers rdrive après authentification réussie
+        const redirectUrl = `${request.protocol}://${request.hostname}:3000/client`;
+        logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);
+        
+        // Envoyer une page HTML avec redirection automatique
+        const htmlResponse = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Google Drive Authentication Successful</title>
+            <meta charset="utf-8">
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+              .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
+              .success { color: #28a745; font-size: 18px; margin-bottom: 20px; }
+              .redirect { color: #6c757d; font-size: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="success">✅ Google Drive Authentication Successful!</div>
+              <div class="redirect">Redirecting to rdrive...</div>
+            </div>
+            <script>
+              // Redirection automatique après 2 secondes
+              setTimeout(() => {
+                window.location.href = '${redirectUrl}';
+              }, 2000);
+            </script>
+          </body>
+          </html>
+        `;
+        
+        return reply.type('text/html').send(htmlResponse);
       } catch (error) {
         logger.error('Google Drive Exchange error:', error);
         return reply.status(500).send('Internal Google Drive OAuth error');

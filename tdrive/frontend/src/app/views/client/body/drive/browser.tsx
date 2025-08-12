@@ -201,7 +201,8 @@ export default memo(
     const [activeChild, setActiveChild] = useState(null);
     const { update } = useDriveActions();
     const { importing: importingDropbox, importDropboxFolder } = useCloudImport();
-    const importingGoogleDrive = false; // Simple state for Google Drive
+    // État d'import séparé pour Google Drive
+    const [importingGoogleDrive, setImportingGoogleDrive] = useState(false);
     const sensors = useSensors(
       useSensor(PointerSensor, {
         activationConstraint: {
@@ -379,18 +380,21 @@ export default memo(
     
     // Fonction pour synchroniser les fichiers Google Drive
     const handleGoogleDriveSync = useCallback(async () => {
-      if (!isGoogleDriveView) return;
+      if (!isGoogleDriveView || importingGoogleDrive) return;
       
       // Extraire le chemin Google Drive du parentId
       const googleDrivePath = parentId === 'googledrive_root' ? '' : parentId.replace('googledrive_', '').replace(/_/g, '/');
       
+      setImportingGoogleDrive(true);
       try {
         // Synchroniser vers un dossier Google Drive séparé pour éviter le mélange avec Dropbox
-        await importDropboxFolder(googleDrivePath, 'googledrive_' + user?.id, { provider: 'googledrive' });
+        await importDropboxFolder(googleDrivePath, 'user_' + user?.id, { provider: 'googledrive' });
       } catch (error) {
         console.error('Erreur lors de la synchronisation Google Drive:', error);
+      } finally {
+        setImportingGoogleDrive(false);
       }
-    }, [isGoogleDriveView, parentId, importDropboxFolder, user?.id]);
+    }, [isGoogleDriveView, parentId, importDropboxFolder, user?.id, importingGoogleDrive]);
 
     return (
       <>
