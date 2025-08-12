@@ -45,7 +45,7 @@ import { DndContext, useSensors, useSensor, PointerSensor, DragOverlay } from '@
 import { Droppable } from 'app/features/dragndrop/hook/droppable';
 import { Draggable } from 'app/features/dragndrop/hook/draggable';
 import { useDriveActions } from '@features/drive/hooks/use-drive-actions';
-import { useCloudImport } from '@features/drive/hooks/use-dropbox-import';
+import { useCloudImport } from '@features/drive/hooks/use-cloud-import';
 import { ConfirmModalAtom } from './modals/confirm-move/index';
 import { useCurrentUser } from 'app/features/users/hooks/use-current-user';
 import { ToasterService } from '@features/global/services/toaster-service';
@@ -201,7 +201,8 @@ export default memo(
     const [activeChild, setActiveChild] = useState(null);
     const { update } = useDriveActions();
     const { importing: importingDropbox, importDropboxFolder } = useCloudImport();
-    const importingGoogleDrive = false; // Simple state for Google Drive
+    // État d'import séparé pour Google Drive
+    const [importingGoogleDrive, setImportingGoogleDrive] = useState(false);
     const sensors = useSensors(
       useSensor(PointerSensor, {
         activationConstraint: {
@@ -378,35 +379,22 @@ export default memo(
     }, [isDropboxView, parentId, importDropboxFolder, user?.id]);
     
     // Fonction pour synchroniser les fichiers Google Drive
-    const handleGoogleDriveSync = async () => {
-      console.log('🔄 Google Drive sync button clicked');
+    const handleGoogleDriveSync = useCallback(async () => {
+      if (!isGoogleDriveView || importingGoogleDrive) return;
       
-      if (importingDropbox) {
-        console.log('⚠️ Import already in progress');
-        return;
-      }
+      // Extraire le chemin Google Drive du parentId
+      const googleDrivePath = parentId === 'googledrive_root' ? '' : parentId.replace('googledrive_', '').replace(/_/g, '/');
       
+      setImportingGoogleDrive(true);
       try {
-        // Vérifier que l'utilisateur est connecté
-        if (!user?.id) {
-          ToasterService.error('Utilisateur non connecté');
-          return;
-        }
-        
-        // Pour Google Drive, synchroniser vers "My Drive" (dossier personnel utilisateur)
-        // au lieu de la vue Google Drive actuelle
-        const myDriveFolderId = `user_${user.id}`;
-        
-        console.log(`🔄 Starting Google Drive sync to My Drive (${myDriveFolderId})`);
-        
-        // Utiliser le même hook unifié que Dropbox avec provider Google Drive
-        await importDropboxFolder('', myDriveFolderId, { provider: 'googledrive' });
-        console.log('✅ Google Drive sync completed successfully');
+        // Synchroniser vers un dossier Google Drive séparé pour éviter le mélange avec Dropbox
+        await importDropboxFolder(googleDrivePath, 'user_' + user?.id, { provider: 'googledrive' });
       } catch (error) {
-        console.error('❌ Google Drive sync failed:', error);
-        ToasterService.error(`Erreur lors de la synchronisation Google Drive: ${(error as Error).message}`);
+        console.error('Erreur lors de la synchronisation Google Drive:', error);
+      } finally {
+        setImportingGoogleDrive(false);
       }
-    };
+    }, [isGoogleDriveView, parentId, importDropboxFolder, user?.id, importingGoogleDrive]);
 
     return (
       <>
