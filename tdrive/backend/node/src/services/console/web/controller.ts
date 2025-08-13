@@ -25,6 +25,7 @@ import gr from "../../global-resolver";
 import { Configuration } from "../../../core/platform/framework";
 import { CompanyUserRole } from "src/services/user/web/types";
 import config from "config";
+import { ldapIntegration } from "../../user/services/ldap-sync/ldap-integration";
 
 export class ConsoleController {
   private passwordEncoder: PasswordEncoder;
@@ -290,17 +291,30 @@ export class ConsoleController {
       throw CrudException.forbidden("User doesn't exists");
     }
 
-    // allow to login in development mode with any password. This can be used to test without the console provider because the password is not stored locally...
-    if (process.env.NODE_ENV !== "development") {
-      const [storedPassword, salt] = await gr.services.users.getHashedPassword({
-        id: user.id,
-      });
-
-      if (!(await this.passwordEncoder.isPasswordValid(storedPassword, password, salt))) {
-        throw CrudException.forbidden("Password doesn't match");
+    // Check if this is an LDAP user first
+    const isLDAPUser = await ldapIntegration.isLDAPUser(email);
+    
+    if (isLDAPUser) {
+      // Authenticate against LDAP
+      const ldapAuthSuccess = await ldapIntegration.authenticateUserWithLDAP(email, password);
+      if (!ldapAuthSuccess) {
+        throw CrudException.forbidden("LDAP authentication failed");
       }
-    } else if (process.env.NODE_ENV === "development") {
-      logger.warn("ERROR_NOTONPROD: YOU ARE RUNNING IN DEVELOPMENT MODE, AUTH IS DISABLED!!!");
+      logger.info(`LDAP user ${email} authenticated successfully`);
+    } else {
+      // Use traditional password authentication for non-LDAP users
+      // allow to login in development mode with any password. This can be used to test without the console provider because the password is not stored locally...
+      if (process.env.NODE_ENV !== "development") {
+        const [storedPassword, salt] = await gr.services.users.getHashedPassword({
+          id: user.id,
+        });
+
+        if (!(await this.passwordEncoder.isPasswordValid(storedPassword, password, salt))) {
+          throw CrudException.forbidden("Password doesn't match");
+        }
+      } else if (process.env.NODE_ENV === "development") {
+        logger.warn("ERROR_NOTONPROD: YOU ARE RUNNING IN DEVELOPMENT MODE, AUTH IS DISABLED!!!");
+      }
     }
 
     return gr.platformServices.auth.generateJWT(user.id, user.email_canonical, "", {

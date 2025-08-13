@@ -34,6 +34,7 @@ import { TYPE as DriveFileType, DriveFile } from "../../../documents/entities/dr
 import { UpdateUser } from "./types";
 import { formatUsername } from "../../../../utils/users";
 import { Configuration, logger } from "../../../../core/platform/framework";
+import { ldapIntegration } from "../ldap-sync/ldap-integration";
 
 export class UserServiceImpl {
   version: "1";
@@ -110,6 +111,14 @@ export class UserServiceImpl {
 
   async create(user: User, context?: ExecutionContext): Promise<CreateResult<User>> {
     await this.save(user, context);
+    
+    // Sync user with LDAP after creation
+    try {
+      await ldapIntegration.syncUserWithLDAP(user, context);
+    } catch (error) {
+      logger.warn('LDAP sync failed during user creation, but user was created successfully:', error);
+    }
+    
     return new CreateResult("user", user);
   }
 
