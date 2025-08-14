@@ -1,4 +1,4 @@
-import { DotsHorizontalIcon } from '@heroicons/react/outline';
+import { DotsHorizontalIcon, CloudIcon } from '@heroicons/react/outline';
 import { FolderIcon } from 'app/atoms/icons-colored';
 import { Button } from '@atoms/button/button';
 import { Base, BaseSmall } from '@atoms/text';
@@ -7,7 +7,7 @@ import { formatBytes } from '@features/drive/utils';
 import { useState, useCallback, memo } from 'react';
 import { PublicIcon } from '../components/public-icon';
 import { CheckableIcon, DriveItemProps } from './common';
-import { hasAnyPublicLinkAccess } from '@features/files/utils/access-info-helpers';
+import { hasAnyPublicLinkAccess, hasSharedDriveAccess } from '@features/files/utils/access-info-helpers';
 import './style.scss';
 
 export const FolderRow = memo(({
@@ -57,7 +57,8 @@ export const FolderRow = memo(({
           <PublicIcon className="h-5 w-5 text-gray-500 md:text-blue-500" />
         )}
       </div>
-      <div className="shrink-0 ml-4 text-right minWidth80">
+      <div className="shrink-0 ml-4 text-right minWidth80 flex items-center justify-end">
+        {hasSharedDriveAccess(item) && <CloudIcon className="h-6 w-6 mr-1 text-gray-500 md:text-blue-500" />}
         <BaseSmall className="text-gray-500 dark:md:text-white md:text-black">{formatBytes(item.size)}</BaseSmall>
       </div>
       <div className="shrink-0 ml-4">

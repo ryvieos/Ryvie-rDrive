@@ -2,6 +2,7 @@ import {
   DotsHorizontalIcon,
   ShieldExclamationIcon,
   BanIcon,
+  CloudIcon,
 } from '@heroicons/react/outline';
 import { Button } from '@atoms/button/button';
 import { Base, BaseSmall } from '@atoms/text';
@@ -18,7 +19,7 @@ import './style.scss';
 import { useHistory } from 'react-router-dom';
 import RouterServices from '@features/router/services/router-service';
 import { DocumentIcon } from './document-icon';
-import { hasAnyPublicLinkAccess } from '@features/files/utils/access-info-helpers';
+import { hasAnyPublicLinkAccess, hasSharedDriveAccess } from '@features/files/utils/access-info-helpers';
 import { formatDateShort } from 'app/features/global/utils/Numbers';
 import FeatureTogglesService, {
   FeatureNames,
@@ -88,7 +89,8 @@ export const DocumentRow = memo(({
       <div className="shrink-0 ml-4 md:mr-12 hidden md:block">
         <BaseSmall>{formatDateShort(item?.last_version_cache?.date_added)}</BaseSmall>
       </div>
-      <div className="shrink-0 ml-4 mr-4 md:mr-none text-right lg:w-24 sm:w-20 ">
+      <div className="shrink-0 ml-4 mr-4 md:mr-none text-right lg:w-24 sm:w-20 flex items-center justify-end">
+        {hasSharedDriveAccess(item) && <CloudIcon className="h-6 w-6 mr-1 text-gray-500 md:text-blue-500" />}
         <BaseSmall className="text-gray-500 dark:md:text-white md:text-black">{formatBytes(item.size)}</BaseSmall>
       </div>
       {FeatureTogglesService.isActiveFeatureName(FeatureNames.COMPANY_AV_ENABLED) && (
