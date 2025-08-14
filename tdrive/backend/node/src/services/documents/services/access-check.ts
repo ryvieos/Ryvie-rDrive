@@ -58,7 +58,12 @@ export const isCompanyGuest = async (context: CompanyExecutionContext): Promise<
     context.user?.id,
   );
 
-  return userRole === "guest" || !userRole;
+  logger.info(`🔍 USER ROLE CHECK: User ${context.user?.id} has role "${userRole}" in company ${context.company.id}`);
+  
+  const isGuest = userRole === "guest" || !userRole;
+  logger.info(`🎯 IS GUEST RESULT: User ${context.user?.id} is ${isGuest ? 'GUEST' : 'MEMBER'}`);
+
+  return isGuest;
 };
 
 /**
@@ -203,6 +208,7 @@ export const getAccessLevel = async (
     }
 
     if (id === "shared_with_me") return "read";
+    if (id === "company_shared") return "read";
 
     /**
      * Entity based access management
@@ -294,6 +300,21 @@ export const getAccessLevel = async (
         a => a.type === "company" && a.id === context.company.id,
       );
       if (matchingCompany && !isCompanyGuest(context)) otherLevels.push(matchingCompany.level);
+
+      //Shared Drive - files shared company-wide via Shared Drive
+      const sharedDriveEntity = accessEntities.find(
+        a => a.type === "folder" && a.id === "shared_drive",
+      );
+      logger.info(`🔍 SHARED DRIVE ACCESS CHECK: Looking for folder:shared_drive entity in ${JSON.stringify(accessEntities)}`);
+      if (sharedDriveEntity && !(await isCompanyGuest(context))) {
+        logger.info(`✅ SHARED DRIVE ACCESS GRANTED: Found entity with level ${sharedDriveEntity.level} for user ${context.user?.id}`);
+        // All company members (non-guests) can access Shared Drive files
+        return sharedDriveEntity.level;
+      } else if (sharedDriveEntity) {
+        logger.info(`❌ SHARED DRIVE ACCESS DENIED: User ${context.user?.id} is a guest`);
+      } else {
+        logger.info(`❌ SHARED DRIVE ACCESS DENIED: No folder:shared_drive entity found`);
+      }
     }
 
     //Parent folder

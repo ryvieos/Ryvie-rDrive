@@ -150,6 +150,12 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
             company_id: companyId,
             mime_type: sharedFilter.mimeType.value,
           };
+          
+          // Debug: Log filter for Shared Drive
+          if (parentId === 'root') {
+            console.log('🔍 FRONTEND DEBUG: Browsing Shared Drive with filter:', filter);
+            console.log('🔍 FRONTEND DEBUG: sharedFilter.mimeType.value:', sharedFilter.mimeType.value);
+          }
           let pagination = await snapshot.getPromise(DriveItemPagination);
 
           if (resetPagination) {

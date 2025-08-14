@@ -8,6 +8,7 @@ import { UploadModelAtom } from './modals/upload'
 import { PropertiesModalAtom } from './modals/properties';
 import { SelectorModalAtom } from './modals/selector';
 import { AccessModalAtom } from './modals/update-access';
+import { SharedDriveModalAtom } from './modals/shared-drive-access';
 import { PublicLinkModalAtom } from './modals/public-link';
 import { VersionsModalAtom } from './modals/versions';
 import { UsersModalAtom } from './modals/manage-users';
@@ -52,6 +53,7 @@ export const useOnBuildContextMenu = (
   const setConfirmTrashModalState = useSetRecoilState(ConfirmTrashModalAtom);
   const setVersionModal = useSetRecoilState(VersionsModalAtom);
   const setAccessModalState = useSetRecoilState(AccessModalAtom);
+  const setSharedDriveModalState = useSetRecoilState(SharedDriveModalAtom);
   const setPublicLinkModalState = useSetRecoilState(PublicLinkModalAtom);
   const setPropertiesModalState = useSetRecoilState(PropertiesModalAtom);
   const setUsersModalState = useSetRecoilState(UsersModalAtom);
@@ -82,18 +84,43 @@ export const useOnBuildContextMenu = (
         const isAllowToCopyLink = avStatusAllowed['copy_link']?.includes(item?.av_status as string);
         const isAllowToCreateVersion = avStatusAllowed['version']?.includes(item?.av_status as string);
 
+
+
         let menu: any[] = [];
 
         if (item && selectedCount < 2) {
           //Add item related menus
-          const upToDateItem = await DriveApiClient.get(item.company_id, item.id);
-          const access = upToDateItem.access || 'none';
+          let upToDateItem;
+          let access = 'none';
+          let currentItem = item;
+          
+          try {
+            upToDateItem = await DriveApiClient.get(item.company_id, item.id);
+            access = upToDateItem.access || 'none';
+            currentItem = upToDateItem.item || item;
+          } catch (error) {
+            console.warn('Failed to get updated item info, using cached item:', error);
+            // Utiliser l'item original si l'API call échoue
+            upToDateItem = null;
+            access = 'read'; // Accès par défaut conservateur
+            currentItem = item;
+          }
+          
           const hideShareItem = access === 'read' || getPublicLinkToken() || inTrash;
           const hideManageAccessItem =
             access === 'read' ||
             getPublicLinkToken() ||
             inTrash ||
             !FeatureTogglesService.isActiveFeatureName(FeatureNames.COMPANY_MANAGE_ACCESS);
+
+          // Vérifier si le fichier est déjà partagé dans le Shared Drive
+          const currentAccessInfo = currentItem.access_info || { entities: [] };
+          const sharedDriveEntity = currentAccessInfo.entities?.find(entity => 
+            entity.type === "folder" && entity.id === "shared_drive"
+          );
+          const isSharedInSharedDrive = !!sharedDriveEntity;
+          const currentSharedDriveLevel = sharedDriveEntity?.level || 'read';
+
           const newMenuActions = [
             {
               testClassId: 'share',
@@ -106,10 +133,20 @@ export const useOnBuildContextMenu = (
             {
               testClassId: 'manage-access',
               type: 'menu',
-              icon: 'users-alt',
+              icon: 'user-group',
               text: Languages.t('components.item_context_menu.manage_access'),
-              hide: hideManageAccessItem || (isCheckFileActionByAvStatus && !isAllowToManageAccess),
+              hide: hideManageAccessItem,
               onClick: () => setAccessModalState({ open: true, id: item.id }),
+            },
+            {
+              testClassId: 'shared-drive-access',
+              type: 'menu',
+              icon: 'cloud',
+              text: isSharedInSharedDrive 
+                ? `Shared Drive (${currentSharedDriveLevel === 'read' ? 'Lecture' : currentSharedDriveLevel === 'write' ? 'Écriture' : 'Gestion'})`
+                : 'Partager dans Shared Drive',
+              hide: inTrash || getPublicLinkToken() || (isCheckFileActionByAvStatus && !isAllowToShare),
+              onClick: () => setSharedDriveModalState({ open: true, id: item.id }),
             },
             {
               testClassId: 'rescan-document',

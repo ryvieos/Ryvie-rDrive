@@ -37,6 +37,7 @@ export type publicAccessLevel = "write" | "read" | "none" | "manage";
 export type RootType = "root";
 export type TrashType = "trash";
 export type SharedWithMeType = "shared_with_me";
+export type CompanySharedType = "company_shared";
 
 export type DownloadZipBodyRequest = {
   items: string[];

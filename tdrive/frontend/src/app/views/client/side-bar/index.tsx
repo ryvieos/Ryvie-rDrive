@@ -226,7 +226,7 @@ export default () => {
             }
             testClassId="sidebar-menu-shared-drive"
           >
-            <CloudIcon className="w-5 h-5 mr-4" /> {Languages.t('components.side_menu.home')}
+            <CloudIcon className="w-5 h-5 mr-4" /> Shared Drive
           </Button>
         )}
         {FeatureTogglesService.isActiveFeatureName(FeatureNames.COMPANY_MANAGE_ACCESS) && (
@@ -246,6 +246,7 @@ export default () => {
             {Languages.t('components.side_menu.shared_with_me')}
           </Button>
         )}
+
         {false && (
           <>
             <Button

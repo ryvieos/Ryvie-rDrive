@@ -35,9 +35,7 @@ export const DrivePreview: React.FC<DrivePreviewProps> = ({ items }) => {
   const { loading: loadingData } = useDrivePreviewLoading();
   let animationTimeout: number = setTimeout(() => undefined);
 
-  const { download, extension } = useDrivePreviewDisplayData();
-  const { type = '' } = useDrivePreviewDisplayData();
-  const name = status.details?.item.name;
+  const { download, extension, name, type = '', size, dateAdded } = useDrivePreviewDisplayData();
 
   useEffect(() => {
     if (!isOpen) {
@@ -150,15 +148,9 @@ export const DrivePreview: React.FC<DrivePreviewProps> = ({ items }) => {
               {name}
             </Text.Base>
             <Text.Info className="whitespace-nowrap testid:preview-file-info">
-              {formatDate(
-                +(status.details?.item.added || '') ||
-                status.details?.item.last_version_cache.date_added,
-              )}{' '}
+              {formatDate(dateAdded)}{' '}
               • {extension?.toLocaleUpperCase()},{' '}
-              {formatSize(
-                status.details?.item.last_version_cache.file_metadata.size ||
-                status.details?.item.size,
-              )}
+              {formatSize(size)}
             </Text.Info>
           </div>
           <div className="whitespace-nowrap flex items-center">
