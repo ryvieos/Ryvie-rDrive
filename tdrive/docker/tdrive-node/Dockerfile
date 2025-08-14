@@ -6,6 +6,7 @@ RUN apk add --update-cache \
       ghostscript \
       graphicsmagick \
       curl \
+      openldap-clients \
     && rm -rf /var/cache/apk/*
 
 
