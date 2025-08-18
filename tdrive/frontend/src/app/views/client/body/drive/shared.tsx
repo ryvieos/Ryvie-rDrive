@@ -72,16 +72,8 @@ export default () => {
                 <Avatar avatar={group.logo} className="inline-block mr-3" size="sm" type="square" testClassId="avatar" />
               )}
               <span className="text-white font-semibold" style={{ lineHeight: '32px' }}>
-                Twake Drive
+                rDrive
               </span>
-            </div>
-            <div className="shrink-0">
-              <a href="https://twake.app" target="_BLANK" rel="noreferrer" className="!text-white testid:create-account-link">
-                <span className="nomobile text-white">
-                  {Languages.t('scenes.app.mainview.create_account')}
-                </span>
-                Twake Workplace &nbsp; 👉
-              </a>
             </div>
           </div>
           <div className="h-full main-view public p-4 pb-16">

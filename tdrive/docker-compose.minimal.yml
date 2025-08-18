@@ -2,7 +2,7 @@ version: "3.4"
 
 services:
   mongo:
-    container_name: mongo
+    container_name: app-rdrive-mongo
     image: mongo
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
@@ -16,6 +16,7 @@ services:
       - 27017:27017
 
   node_create_user:
+    container_name: app-rdrive-node-create-user
     build: &backend_docker_build
       context: .
       dockerfile: docker/tdrive-node/Dockerfile
@@ -32,7 +33,7 @@ services:
       - STORAGE_LOCAL_PATH=/tdrive
       - ENABLE_FEATURE_ANTIVIRUS=false
       - DIAG_PROBE_SECRET=diag-secret
-      - LDAP_URL=ldap://192.168.6.141:389
+      - LDAP_URL=ldap://openldap:1389
       - LDAP_BIND_DN=cn=admin,dc=example,dc=org
       - LDAP_BIND_PASSWORD=adminpassword
       - LDAP_BASE_DN=dc=example,dc=org
@@ -54,6 +55,7 @@ services:
         condition: service_healthy
   
   node:
+    container_name: app-rdrive-node
     build: *backend_docker_build
     ports:
       - 4000:4000
@@ -71,7 +73,7 @@ services:
     build:
       context: .
       dockerfile: docker/tdrive-frontend/Dockerfile
-    container_name: tdrive-frontend
+    container_name: app-rdrive-frontend
     environment:
       - DEV=production
       - SSL_CERTS=off
