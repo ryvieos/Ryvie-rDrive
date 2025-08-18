@@ -2,6 +2,7 @@ version: "3.4"
 
 services:
   onlyoffice-connector:
+    container_name: app-rdrive-onlyoffice-connector
     image: twakedrive/onlyoffice-connector:latest
     environment:
       - SERVER_PORT=5000

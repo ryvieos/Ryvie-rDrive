@@ -5,7 +5,7 @@ services:
   onlyoffice-rabbitmq:
     image: rabbitmq:management
     hostname: onlyoffice-rabbitmq
-    container_name: rabbitmq
+    container_name: app-rdrive-rabbitmq
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
@@ -21,6 +21,7 @@ services:
   onlyoffice-postgresql:
     image: postgres:13
     hostname: onlyoffice-postgresql
+    container_name: app-rdrive-postgresql
     environment:
       - POSTGRES_DB=onlyoffice
       - POSTGRES_USER=onlyoffice
@@ -35,6 +36,7 @@ services:
   onlyoffice:
     image: docker.io/onlyoffice/documentserver
     hostname: onlyoffice
+    container_name: app-rdrive-onlyoffice
     ports:
       - 8090:80
     networks:
