@@ -32,7 +32,7 @@ services:
       - STORAGE_LOCAL_PATH=/tdrive
       - ENABLE_FEATURE_ANTIVIRUS=false
       - DIAG_PROBE_SECRET=diag-secret
-      - LDAP_URL=ldap://192.168.6.141:389
+      - LDAP_URL=ldap://openldap:1389
       - LDAP_BIND_DN=cn=admin,dc=example,dc=org
       - LDAP_BIND_PASSWORD=adminpassword
       - LDAP_BASE_DN=dc=example,dc=org
