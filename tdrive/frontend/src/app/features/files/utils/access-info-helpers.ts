@@ -168,3 +168,12 @@ export function changePublicLink(
 /** Return the access level of the public link if it's set, and it isn't `"none"`, or returns false */
 export const hasAnyPublicLinkAccess = (item?: Partial<DriveItem>) : Exclude<DriveFileAccessLevel, "none"> | false =>
   (item?.access_info?.public?.level && item.access_info.public.level != "none") ? item.access_info.public.level : false;
+
+/** Return the access level of the shared drive if it's set, and it isn't `"none"`, or returns false */
+export const hasSharedDriveAccess = (item?: Partial<DriveItem>) : Exclude<DriveFileAccessLevel, "none"> | false => {
+  // Only check if the item itself is directly shared in Shared Drive
+  const sharedDriveEntity = item?.access_info?.entities?.find(
+    entity => entity.type === "folder" && entity.id === "shared_drive"
+  );
+  return (sharedDriveEntity?.level && sharedDriveEntity.level !== "none") ? sharedDriveEntity.level : false;
+};

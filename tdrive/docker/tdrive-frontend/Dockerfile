@@ -1,17 +1,17 @@
 # First stage: building frontend
 FROM node:lts-alpine AS build
 
-RUN yarn global add webpack webpack-cli
+RUN npm install -g webpack webpack-cli
 COPY frontend /tdrive-react/
 
 WORKDIR /tdrive-react/
 
 ENV GENERATE_SOURCEMAP=false
 RUN cp /tdrive-react/src/app/environment/environment.ts.dist /tdrive-react/src/app/environment/environment.ts && \
-    yarn install --network-timeout 1000000000 && \
+    npm ci --legacy-peer-deps && \
     # cat /tdrive-react/src/app/environment/environment.ts.dist && \
     # cat /tdrive-react/src/app/environment/environment.ts && \
-    yarn build && \
+    DISABLE_ESLINT_PLUGIN=true npm run build && \
     rm -rf node_modules
 
 # Second stage: configuring nginx and copying build artifacts

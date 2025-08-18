@@ -42,6 +42,9 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
   private GOOGLE_CLIENT_ID = '758017908766-8586ul049ht0h10vgp779dskk4riu7ug.apps.googleusercontent.com';
   private GOOGLE_CLIENT_SECRET = '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';
 
+  private fs = require('fs');
+  private path = require('path');
+
   constructor() {
     super();
     logger.info("Initializing Rclone service");
@@ -49,6 +52,83 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
 
   api(): RcloneAPI {
     return this;
+  }
+
+  /**
+   * Récupère l'ID de la compagnie la plus ancienne dans le répertoire des fichiers
+   * @returns {string} L'ID de la compagnie la plus ancienne ou un ID par défaut
+   */
+  private getOldestCompanyId(): string {
+    try {
+      const filesDir = '/tdrive/docker-data/files/tdrive/files';
+      if (!this.fs.existsSync(filesDir)) {
+        logger.warn(`Directory ${filesDir} does not exist`);
+        return '56a909e0-7879-11f0-ab27-213ceb1c6139'; // ID par défaut
+      }
+
+      const folders = this.fs.readdirSync(filesDir)
+        .filter(name => this.fs.statSync(this.path.join(filesDir, name)).isDirectory())
+        .filter(name => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name));
+
+      if (folders.length === 0) {
+        logger.warn('No valid company folders found');
+        return '56a909e0-7879-11f0-ab27-213ceb1c6139'; // ID par défaut
+      }
+
+      // Trier par date de création (la plus ancienne d'abord)
+      const oldestFolder = folders.sort((a, b) => {
+        const statA = this.fs.statSync(this.path.join(filesDir, a));
+        const statB = this.fs.statSync(this.path.join(filesDir, b));
+        return statA.birthtimeMs - statB.birthtimeMs;
+      })[0];
+
+      logger.info(`Using oldest company ID: ${oldestFolder}`);
+      return oldestFolder;
+    } catch (error) {
+      logger.error('Error finding oldest company ID:', error);
+      return '56a909e0-7879-11f0-ab27-213ceb1c6139'; // ID par défaut en cas d'erreur
+    }
+  }
+
+  /**
+   * Récupère l'ID de l'utilisateur le plus ancien dans une compagnie
+   * @param companyId ID de la compagnie
+   * @returns {string} L'ID de l'utilisateur le plus ancien ou un ID par défaut
+   */
+  private getOldestUserId(companyId: string): string {
+    try {
+      const companyDir = `/tdrive/docker-data/files/tdrive/files/${companyId}`;
+      if (!this.fs.existsSync(companyDir)) {
+        logger.warn(`Company directory ${companyDir} does not exist`);
+        return 'fb874730-787c-11f0-8368-bda158d4e36c'; // ID par défaut
+      }
+
+      // Chercher dans les sous-dossiers pour trouver les dossiers d'utilisateurs
+      // Typiquement, les dossiers utilisateurs commencent par "user_"
+      const userFolders = this.fs.readdirSync(companyDir)
+        .filter(name => this.fs.statSync(this.path.join(companyDir, name)).isDirectory())
+        .filter(name => name.startsWith('user_'));
+
+      if (userFolders.length === 0) {
+        logger.warn('No valid user folders found');
+        return 'fb874730-787c-11f0-8368-bda158d4e36c'; // ID par défaut
+      }
+
+      // Trier par date de création (la plus ancienne d'abord)
+      const oldestUserFolder = userFolders.sort((a, b) => {
+        const statA = this.fs.statSync(this.path.join(companyDir, a));
+        const statB = this.fs.statSync(this.path.join(companyDir, b));
+        return statA.birthtimeMs - statB.birthtimeMs;
+      })[0];
+
+      // Extraire l'ID utilisateur du nom du dossier (enlever le préfixe "user_")
+      const userId = oldestUserFolder.replace('user_', '');
+      logger.info(`Using oldest user ID: ${userId}`);
+      return userId;
+    } catch (error) {
+      logger.error('Error finding oldest user ID:', error);
+      return 'fb874730-787c-11f0-8368-bda158d4e36c'; // ID par défaut en cas d'erreur
+    }
   }
 
   async doInit(): Promise<this> {
@@ -1275,15 +1355,19 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
           if (driveParentId) {
             logger.info('\n🗂️ === MYDRIVE CONTENT ===');
             
+            const oldestCompanyId = this.getOldestCompanyId();
+            const oldestUserId = this.getOldestUserId(oldestCompanyId);
             const executionContext = {
-              company: { id: 'c27eaab0-73a3-11f0-b9ef-8519a7f1b5e4' },
+              company: { id: oldestCompanyId },
               user: { 
-                id: request.user?.id || 'c2611090-73a3-11f0-b9ef-8519a7f1b5e4',
+                id: request.user?.id || oldestUserId,
                 email: userEmail,
                 server_request: true,
                 application_id: null
               }
             };
+            logger.info(`🔑 Using company ID: ${executionContext.company.id} (from oldest folder)`);
+            logger.info(`🔑 Using user ID: ${executionContext.user.id} (${request.user?.id ? 'from request' : 'from oldest user folder'})`);
             
             const browseResult = await globalResolver.services.documents.documents.browse(
               driveParentId,
@@ -1474,11 +1558,13 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         logger.info(`📂 ${provider.toUpperCase()} path: "${cloudPath}", Drive parent: "${driveParentId}"`);
         logger.info(`📁 Folder map:`, folderMap);
         
-        // Créer le contexte d'exécution
+        // Créer le contexte d'exécution avec les IDs les plus anciens
+        const oldestCompanyId = this.getOldestCompanyId();
+        const oldestUserId = this.getOldestUserId(oldestCompanyId);
         const executionContext = {
-          company: { id: 'c27eaab0-73a3-11f0-b9ef-8519a7f1b5e4' },
+          company: { id: oldestCompanyId },
           user: { 
-            id: request.user?.id || 'c2611090-73a3-11f0-b9ef-8519a7f1b5e4',
+            id: request.user?.id || oldestUserId,
             email: userEmail,
             server_request: true,
             application_id: null
@@ -1488,9 +1574,9 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
           reqId: 'rclone-sync',
           transport: 'http' as const,
         };
+        logger.info(`🔑 Using company ID: ${executionContext.company.id} (from oldest folder)`);
+        logger.info(`🔑 Using user ID: ${executionContext.user.id} (${request.user?.id ? 'from request' : 'from oldest user folder'})`);
         
-        // === LOGIQUE DE SYNCHRONISATION CONDITIONNELLE (comme dans /analyze) ===
-        // Mettre à jour le remote pour cet utilisateur selon le provider
         this.currentUserEmail = userEmail;
         let remoteName: string;
         

@@ -20,6 +20,7 @@ import { DriveFileMetadata, FileVersion } from "./entities/file-version";
 import { checkAccess, generateAccessToken } from "./services/access-check";
 import {
   CompanyExecutionContext,
+  CompanySharedType,
   DriveExecutionContext,
   NotificationActionType,
   NotificationPayloadType,
@@ -32,6 +33,7 @@ import short, { Translator } from "short-uuid";
 const ROOT: RootType = "root";
 const TRASH: TrashType = "trash";
 const SHARED_WITH_ME: SharedWithMeType = "shared_with_me";
+const COMPANY_SHARED: CompanySharedType = "company_shared";
 
 export const isVirtualFolder = (id: string) => {
   return (
@@ -39,12 +41,17 @@ export const isVirtualFolder = (id: string) => {
     id === TRASH ||
     id.startsWith("trash_") ||
     id.startsWith("user_") ||
-    id == SHARED_WITH_ME
+    id == SHARED_WITH_ME ||
+    id == COMPANY_SHARED
   );
 };
 
 export const isSharedWithMeFolder = (id: string) => {
   return id === SHARED_WITH_ME;
+};
+
+export const isCompanySharedFolder = (id: string) => {
+  return id === COMPANY_SHARED;
 };
 
 export const getVirtualFoldersNames = async (id: string, context: DriveExecutionContext) => {

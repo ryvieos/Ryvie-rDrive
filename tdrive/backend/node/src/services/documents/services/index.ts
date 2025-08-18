@@ -112,12 +112,80 @@ export class DocumentsService {
   ): Promise<BrowseDetails> => {
     if (isSharedWithMeFolder(id)) {
       return this.sharedWithMe(options, context);
+    } else if (id === 'root') {
+      // Pour le Shared Drive (root), afficher les fichiers avec permissions "company"
+      return this.companyShared(options, context);
     } else {
       return {
         nextPage: null,
         ...(await this.get(id, options, context, false)),
       };
     }
+  };
+
+  companyShared = async (
+    options: SearchDocumentsOptions,
+    context: DriveExecutionContext & { public_token?: string },
+  ): Promise<BrowseDetails> => {
+    if (options.pagination) {
+      if (options.pagination.page_token == "1") {
+        delete options.pagination.page_token;
+      }
+    }
+
+    if (options.sort) {
+      options.sort = this.getSortFieldMapping(options.sort);
+    }
+
+    // Handle pagination differently for non-MongoDB platforms
+    globalResolver.platformServices.search.handlePagination(options);
+
+    // Chercher TOUS les fichiers de la compagnie et filtrer côté application
+    const allFiles: ListResult<DriveFile> = await this.repository.find(
+      {
+        company_id: context.company.id,
+        is_in_trash: false,
+      },
+      {
+        sort: {
+          is_directory: "desc",
+          ...(options.sort || {}),
+        },
+      },
+      context,
+    );
+
+    // Debug: Log total files found
+    const allEntities = allFiles.getEntities();
+    console.log(`🔍 COMPANY SHARED DEBUG: Found ${allEntities.length} total files in company`);
+
+    // Filtrer les fichiers explicitement partagés avec le Shared Drive
+    const companySharedFiles = allEntities.filter(file => {
+      const hasSharedDriveAccess = file.access_info?.entities?.some(entity => 
+        entity.type === "folder" && entity.id === "shared_drive"
+      );
+      if (hasSharedDriveAccess) {
+        console.log(`✅ SHARED DRIVE: Found file explicitly shared to Shared Drive: ${file.name}`);
+      }
+      return hasSharedDriveAccess;
+    });
+
+    console.log(`🎯 COMPANY SHARED RESULT: Returning ${companySharedFiles.length} company-shared files`);
+
+    // Créer un nouveau ListResult avec les fichiers filtrés
+    const fileList = {
+      getEntities: () => companySharedFiles,
+      nextPage: allFiles.nextPage,
+    };
+
+    const result = fileList.getEntities();
+
+    return {
+      access: "read",
+      children: result,
+      nextPage: fileList.nextPage,
+      path: [] as Array<DriveFile>,
+    };
   };
 
   sharedWithMe = async (
@@ -147,6 +215,8 @@ export class DocumentsService {
       path: [] as Array<DriveFile>,
     };
   };
+
+
 
   userQuota = async (context: CompanyExecutionContext): Promise<number> => {
     const children = await this.repository.find({

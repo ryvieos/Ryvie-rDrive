@@ -96,23 +96,29 @@ export const useDrivePreviewLoading = () => {
 export const useDrivePreviewDisplayData = () => {
   const { status } = useDrivePreview();
 
-  if (!status) {
+  if (!status || !status.details?.item) {
     return {};
   }
 
-  const name =
-    status.details?.item.last_version_cache.file_metadata.name || status.details?.item.name || '';
+  // Defensive checks to prevent crashes when data is incomplete
+  const item = status.details.item;
+  const lastVersionCache = item.last_version_cache;
+  const fileMetadata = lastVersionCache?.file_metadata;
+
+  const name = fileMetadata?.name || item.name || '';
   const extension = name.split('.').pop();
   const type = fileUploadApiClient.mimeToType(
-    status.details?.item.last_version_cache.file_metadata.mime || '',
+    fileMetadata?.mime || '',
     extension,
   );
-  const id = status.details?.item.last_version_cache.file_metadata.external_id || '';
+  const id = fileMetadata?.external_id || '';
   const download = fileUploadService.getDownloadRoute({
     companyId: status.item?.company_id || '',
-    fileId: status.details?.item.last_version_cache.file_metadata.external_id || '',
+    fileId: fileMetadata?.external_id || '',
   });
 
-  return { download, id, name, type, extension, size: status.details?.item.size };
+  const dateAdded = +(item.added || '') || lastVersionCache?.date_added || 0;
+
+  return { download, id, name, type, extension, size: item.size, dateAdded };
 };
 
