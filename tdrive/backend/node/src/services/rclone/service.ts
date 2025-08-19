@@ -55,79 +55,48 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
   }
 
   /**
-   * Récupère l'ID de la compagnie la plus ancienne dans le répertoire des fichiers
-   * @returns {string} L'ID de la compagnie la plus ancienne ou un ID par défaut
+   * Récupère l'ID de la company depuis MongoDB
    */
-  private getOldestCompanyId(): string {
+  private async getCompanyId(): Promise<string> {
     try {
-      const filesDir = '/tdrive/docker-data/files/tdrive/files';
-      if (!this.fs.existsSync(filesDir)) {
-        logger.warn(`Directory ${filesDir} does not exist`);
-        return '56a909e0-7879-11f0-ab27-213ceb1c6139'; // ID par défaut
+      const companies = await globalResolver.services.companies.getCompanies();
+      const company = companies.getEntities()?.[0];
+      
+      if (!company) {
+        throw new Error('No company found in database');
       }
-
-      const folders = this.fs.readdirSync(filesDir)
-        .filter(name => this.fs.statSync(this.path.join(filesDir, name)).isDirectory())
-        .filter(name => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(name));
-
-      if (folders.length === 0) {
-        logger.warn('No valid company folders found');
-        return '56a909e0-7879-11f0-ab27-213ceb1c6139'; // ID par défaut
-      }
-
-      // Trier par date de création (la plus ancienne d'abord)
-      const oldestFolder = folders.sort((a, b) => {
-        const statA = this.fs.statSync(this.path.join(filesDir, a));
-        const statB = this.fs.statSync(this.path.join(filesDir, b));
-        return statA.birthtimeMs - statB.birthtimeMs;
-      })[0];
-
-      logger.info(`Using oldest company ID: ${oldestFolder}`);
-      return oldestFolder;
+      
+      return company.id;
     } catch (error) {
-      logger.error('Error finding oldest company ID:', error);
-      return '56a909e0-7879-11f0-ab27-213ceb1c6139'; // ID par défaut en cas d'erreur
+      logger.error('Error getting company ID from database:', error);
+      throw error;
     }
   }
 
   /**
-   * Récupère l'ID de l'utilisateur le plus ancien dans une compagnie
-   * @param companyId ID de la compagnie
-   * @returns {string} L'ID de l'utilisateur le plus ancien ou un ID par défaut
+   * Récupère l'ID de l'utilisateur depuis MongoDB
    */
-  private getOldestUserId(companyId: string): string {
+  private async getUserId(): Promise<string> {
     try {
-      const companyDir = `/tdrive/docker-data/files/tdrive/files/${companyId}`;
-      if (!this.fs.existsSync(companyDir)) {
-        logger.warn(`Company directory ${companyDir} does not exist`);
-        return 'fb874730-787c-11f0-8368-bda158d4e36c'; // ID par défaut
+      const companyId = await this.getCompanyId();
+      const users = await globalResolver.services.users.list(
+        { limitStr: "1" },
+        {},
+        { 
+          company: { id: companyId },
+          user: { id: null, server_request: true } 
+        } as any
+      );
+      const user = users.getEntities()?.[0];
+      
+      if (!user) {
+        throw new Error('No user found in database');
       }
-
-      // Chercher dans les sous-dossiers pour trouver les dossiers d'utilisateurs
-      // Typiquement, les dossiers utilisateurs commencent par "user_"
-      const userFolders = this.fs.readdirSync(companyDir)
-        .filter(name => this.fs.statSync(this.path.join(companyDir, name)).isDirectory())
-        .filter(name => name.startsWith('user_'));
-
-      if (userFolders.length === 0) {
-        logger.warn('No valid user folders found');
-        return 'fb874730-787c-11f0-8368-bda158d4e36c'; // ID par défaut
-      }
-
-      // Trier par date de création (la plus ancienne d'abord)
-      const oldestUserFolder = userFolders.sort((a, b) => {
-        const statA = this.fs.statSync(this.path.join(companyDir, a));
-        const statB = this.fs.statSync(this.path.join(companyDir, b));
-        return statA.birthtimeMs - statB.birthtimeMs;
-      })[0];
-
-      // Extraire l'ID utilisateur du nom du dossier (enlever le préfixe "user_")
-      const userId = oldestUserFolder.replace('user_', '');
-      logger.info(`Using oldest user ID: ${userId}`);
-      return userId;
+      
+      return user.id;
     } catch (error) {
-      logger.error('Error finding oldest user ID:', error);
-      return 'fb874730-787c-11f0-8368-bda158d4e36c'; // ID par défaut en cas d'erreur
+      logger.error('Error getting user ID from database:', error);
+      throw error;
     }
   }
 
@@ -1355,12 +1324,12 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
           if (driveParentId) {
             logger.info('\n🗂️ === MYDRIVE CONTENT ===');
             
-            const oldestCompanyId = this.getOldestCompanyId();
-            const oldestUserId = this.getOldestUserId(oldestCompanyId);
+            const companyId = await this.getCompanyId();
+            const userId = await this.getUserId();
             const executionContext = {
-              company: { id: oldestCompanyId },
+              company: { id: companyId },
               user: { 
-                id: request.user?.id || oldestUserId,
+                id: request.user?.id || userId,
                 email: userEmail,
                 server_request: true,
                 application_id: null
@@ -1558,13 +1527,13 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         logger.info(`📂 ${provider.toUpperCase()} path: "${cloudPath}", Drive parent: "${driveParentId}"`);
         logger.info(`📁 Folder map:`, folderMap);
         
-        // Créer le contexte d'exécution avec les IDs les plus anciens
-        const oldestCompanyId = this.getOldestCompanyId();
-        const oldestUserId = this.getOldestUserId(oldestCompanyId);
+        // Créer le contexte d'exécution avec les IDs dynamiques
+        const companyId = await this.getCompanyId();
+        const userId = await this.getUserId();
         const executionContext = {
-          company: { id: oldestCompanyId },
+          company: { id: companyId },
           user: { 
-            id: request.user?.id || oldestUserId,
+            id: request.user?.id || userId,
             email: userEmail,
             server_request: true,
             application_id: null

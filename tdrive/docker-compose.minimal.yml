@@ -45,7 +45,7 @@ services:
       - ./backend/node/profiles:/usr/src/app/profiles
       - ./backend/node/src:/usr/src/app/src
       # Volume persistant pour le stockage des fichiers
-      - ./docker-data/files:/tdrive
+      - ./docker-data/files:/tdrive/docker-data/files
       # Montage de rclone depuis l'hôte
       - /usr/bin/rclone:/usr/bin/rclone:ro
       # Montage pour que sudo rclone fonctionne sur l'hôte (utilise la config de root)

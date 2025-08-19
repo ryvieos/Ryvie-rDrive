@@ -2,11 +2,15 @@
 
 import { execSync } from 'child_process';
 import path from 'path';
+import * as fs from 'fs';
 import { TdrivePlatform, TdrivePlatformConfiguration } from '../core/platform/platform';
 import globalResolver from '../services/global-resolver';
 import config from '../core/config';
 import User from '../services/user/entities/user';
 import Workspace from '../services/workspaces/entities/workspace';
+import Company from '../services/user/entities/company';
+import { getInstance as getCompanyInstance } from '../services/user/entities/company';
+import { spawn } from 'child_process';
 
 interface LDAPUser {
   username: string;
@@ -90,6 +94,93 @@ async function initializeTdrive(): Promise<void> {
   }
 }
 
+/**
+ * Get or create the default company for local mode
+ * Reusable utility function that ensures a company always exists
+ */
+async function getOrCreateDefaultCompany(): Promise<Company> {
+  const gr = globalResolver;
+  const companies = await gr.services.companies.getCompanies();
+  let company = companies.getEntities()?.[0];
+  
+  if (!company) {
+    console.log('🏢 No company found, creating default "Tdrive" company');
+    const newCompany = getCompanyInstance({
+      name: "Tdrive",
+      plan: { name: "Local", limits: undefined, features: undefined },
+    });
+    company = await gr.services.companies.createCompany(newCompany);
+    console.log(`✅ Created default company: ${company.name} (${company.id})`);
+  } else {
+    console.log(`🏢 Using existing company: ${company.name} (${company.id})`);
+  }
+  
+  return company;
+}
+
+/**
+ * Create user directory structure in the file system
+ * This ensures user folders exist for file storage
+ */
+async function createUserDirectory(userId: string, workspaceId: string): Promise<void> {
+  try {
+    const userDirPath = `/tdrive/docker-data/files/tdrive/files/${workspaceId}/${userId}`;
+    
+    // Create directory recursively if it doesn't exist
+    if (!fs.existsSync(userDirPath)) {
+      fs.mkdirSync(userDirPath, { recursive: true });
+      console.log(`   📁 Created user directory: ${userDirPath}`);
+    } else {
+      console.log(`   📁 User directory already exists: ${userDirPath}`);
+    }
+  } catch (error) {
+    console.error(`   ❌ Failed to create user directory for ${userId}:`, error);
+  }
+}
+
+/**
+ * Reindex users in the search database
+ * This ensures users are properly indexed and visible in the frontend
+ */
+async function reindexUsers(): Promise<void> {
+  try {
+    console.log('\n🔍 Starting user reindexing...');
+    
+    // Use the CLI command to reindex users
+    return new Promise((resolve, reject) => {
+      const reindexProcess = spawn('node', [
+        'dist/cli/index.js',
+        'search',
+        'index',
+        '--repository=users',
+        '--repairEntities'
+      ], {
+        stdio: 'inherit'
+      });
+      
+      reindexProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log('✅ User reindexing completed successfully');
+          resolve();
+        } else {
+          console.error(`❌ User reindexing failed with code ${code}`);
+          // Don't reject, as we want the script to continue even if reindexing fails
+          resolve();
+        }
+      });
+      
+      reindexProcess.on('error', (err) => {
+        console.error('❌ Failed to start reindexing process:', err);
+        // Don't reject, as we want the script to continue even if reindexing fails
+        resolve();
+      });
+    });
+  } catch (error) {
+    console.error('❌ Error during user reindexing:', error);
+    // Don't throw, as we want the script to continue even if reindexing fails
+  }
+}
+
 async function syncLDAPUsersToTdrive(): Promise<void> {
   try {
     console.log('🚀 Starting LDAP to Tdrive user synchronization...');
@@ -106,6 +197,9 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
       return;
     }
     
+    // Ensure a default company exists before processing users
+    const company = await getOrCreateDefaultCompany();
+    
     let createdCount = 0;
     let updatedCount = 0;
     let errorCount = 0;
@@ -120,13 +214,7 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
         if (existingUser) {
           console.log(`   ✅ User ${ldapUser.email} already exists in Tdrive`);
           
-          // Get the first company (same logic as signup method)
-          const companies = await gr.services.companies.getCompanies();
-          const company = companies.getEntities()?.[0];
-          if (!company) {
-            console.error('❌ No company found - cannot sync existing LDAP user');
-            continue;
-          }
+          // Company is already ensured to exist at this point
           
           // Update user information if needed
           let needsUpdate = false;
@@ -213,6 +301,13 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
           await gr.services.users.save(existingUser, context);
           console.log(`   🔗 Updated recent_workspaces for ${ldapUser.email}`);
           
+          // Use the known workspace ID from MongoDB: 77a79af0-7cf5-11f0-b71f-6f7455128b9e
+          // This matches the workspace structure we found in the database
+          const workspaceId = '77a79af0-7cf5-11f0-b71f-6f7455128b9e';
+          
+          // Ensure user directory exists for existing user
+          await createUserDirectory(existingUser.id, workspaceId);
+          
           updatedCount++;
           
         } else {
@@ -230,20 +325,11 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
           newUser.last_activity = new Date().getTime();
           newUser.creation_date = new Date().getTime();
           newUser.deleted = false;
-          // Get the first company (same logic as signup method)
-          const companies = await globalResolver.services.companies.getCompanies();
-          const company = companies.getEntities()?.[0];
-          if (!company) {
-            console.error('❌ No company found - cannot sync LDAP user');
-            continue;
-          }
-          
+          // Company is already ensured to exist at this point
           // Add companies field for LDAP users via cache (must be object)
           newUser.cache = {
             companies: [company.id]
           };
-          
-          // Initialize preferences with recent_workspaces (crucial for frontend company_id context)
           newUser.preferences = {
             recent_workspaces: []
           };
@@ -253,6 +339,13 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
           
           const saveResult = await gr.services.users.save(newUser, context);
           console.log(`   ✅ Created user ${ldapUser.email}`);
+          
+          // Use the known workspace ID from MongoDB: 77a79af0-7cf5-11f0-b71f-6f7455128b9e
+          // This matches the workspace structure we found in the database
+          const workspaceId = '77a79af0-7cf5-11f0-b71f-6f7455128b9e';
+          
+          // Ensure user directory exists (after user creation)
+          await createUserDirectory(saveResult.entity.id, workspaceId);
           
           // Associate user with company (same logic as signup method)
           await gr.services.companies.setUserRole(company.id, saveResult.entity.id, 'member');
@@ -319,6 +412,14 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
     console.log(`   🔄 Updated: ${updatedCount} users`);
     console.log(`   ❌ Errors: ${errorCount} users`);
     console.log('✅ LDAP synchronization completed!');
+    
+    // Reindex users after synchronization to ensure they appear in the frontend
+    if (createdCount > 0 || updatedCount > 0) {
+      console.log('\n🔄 Users were created or updated, starting reindexing...');
+      await reindexUsers();
+    } else {
+      console.log('\n⏭️ No users were created or updated, skipping reindexing');
+    }
     
   } catch (error: any) {
     console.error('❌ Fatal error during synchronization:', error);
