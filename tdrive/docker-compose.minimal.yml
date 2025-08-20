@@ -14,13 +14,15 @@ services:
       - ./docker-data/mongo:/data/db
     ports:
       - 27017:27017
+    networks:
+      - tdrive_default
+      - ldap_my_custom_network
 
   node_create_user:
     container_name: app-rdrive-node-create-user
     build: &backend_docker_build
       context: .
       dockerfile: docker/tdrive-node/Dockerfile
-      # target: development
       target: production
     environment: &backend_env_vars
       - DEV=dev
@@ -39,21 +41,20 @@ services:
       - LDAP_BASE_DN=dc=example,dc=org
       - LDAP_USERS_DN=ou=users,dc=example,dc=org
       - LDAP_GROUPS_DN=ou=groups,dc=example,dc=org
-
     command: node dist/bin/sync_ldap_users.js
     volumes: &backend_volumes
       - ./backend/node/profiles:/usr/src/app/profiles
       - ./backend/node/src:/usr/src/app/src
-      # Volume persistant pour le stockage des fichiers
       - ./docker-data/files:/tdrive/docker-data/files
-      # Montage de rclone depuis l'hôte
       - /usr/bin/rclone:/usr/bin/rclone:ro
-      # Montage pour que sudo rclone fonctionne sur l'hôte (utilise la config de root)
       - /root/.config/rclone:/root/.config/rclone
     depends_on: &backend_dependencies
       mongo:
         condition: service_healthy
-  
+    networks:
+      - tdrive_default
+      - ldap_my_custom_network
+
   node:
     container_name: app-rdrive-node
     build: *backend_docker_build
@@ -68,7 +69,10 @@ services:
       <<: *backend_dependencies
       node_create_user:
         condition: service_completed_successfully
-  
+    networks:
+      - tdrive_default
+      - ldap_my_custom_network
+
   frontend:
     build:
       context: .
@@ -90,3 +94,12 @@ services:
       - ./docker-data/drive-preview/:/tdrive-core/web/medias/
       - ./docker-data/uploads/:/tdrive-core/web/upload/
       - ./docker-data/ssl:/etc/nginx/ssl
+    networks:
+      - tdrive_default
+      - ldap_my_custom_network
+
+networks:
+  tdrive_default:
+    name: tdrive_default
+  ldap_my_custom_network:
+    external: true
