@@ -1,4 +1,5 @@
 {
   "name": "Twake Drive",
-  "short_name": "Twake Drive"
+  "short_name": "Twake Drive",
+  "display": "browser"
 }
