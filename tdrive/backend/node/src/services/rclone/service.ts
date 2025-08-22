@@ -1079,9 +1079,40 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         });
 
         // Redirection automatique vers rdrive après authentification réussie
-        // Extraire le hostname sans port pour éviter les URLs malformées
-        const hostname = request.hostname.split(':')[0];
-        const redirectUrl = `${request.protocol}://${hostname}:3000/client`;
+        // Détecter le port d'origine pour une redirection dynamique
+        let redirectUrl: string;
+        
+        try {
+          // 1. Essayer de récupérer le port depuis le Referer
+          const referer = request.headers.referer as string;
+          if (referer) {
+            const refererUrl = new URL(referer);
+            const port = refererUrl.port || (refererUrl.protocol === 'https:' ? '443' : '80');
+            redirectUrl = `${refererUrl.protocol}//${refererUrl.hostname}${port !== '80' && port !== '443' ? `:${port}` : ''}/client`;
+            logger.info(`Port détecté depuis Referer: ${port}`);
+          }
+        } catch (e) {
+          logger.info(`Erreur lors de la détection du port depuis Referer: ${e.message}`);
+        }
+        
+        // 2. Fallback sur l'en-tête Origin
+        if (!redirectUrl) {
+          const origin = request.headers.origin as string;
+          if (origin) {
+            redirectUrl = `${origin}/client`;
+            logger.info(`Utilisation de l'Origin: ${origin}`);
+          }
+        }
+        
+        // 3. Fallback obligatoire si aucune autre méthode ne fonctionne
+        if (!redirectUrl) {
+          // Utiliser l'host de la requête mais remplacer le port backend par le port frontend
+          const hostname = request.hostname.split(':')[0];
+          const frontendPort = request.headers.host?.includes(':3010') ? '3010' : '3010'; // Port frontend par défaut
+          redirectUrl = `${request.protocol}://${hostname}:${frontendPort}/client`;
+          logger.info(`Fallback obligatoire: redirection vers ${redirectUrl}`);
+        }
+        
         logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);
         
         // Envoyer une page HTML avec redirection automatique
@@ -1782,9 +1813,40 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         });
 
         // Redirection automatique vers rdrive après authentification réussie
-        // Extraire le hostname sans port pour éviter les URLs malformées
-        const hostname = request.hostname.split(':')[0];
-        const redirectUrl = `${request.protocol}://${hostname}:3000/client`;
+        // Détecter le port d'origine pour une redirection dynamique
+        let redirectUrl: string;
+        
+        try {
+          // 1. Essayer de récupérer le port depuis le Referer
+          const referer = request.headers.referer as string;
+          if (referer) {
+            const refererUrl = new URL(referer);
+            const port = refererUrl.port || (refererUrl.protocol === 'https:' ? '443' : '80');
+            redirectUrl = `${refererUrl.protocol}//${refererUrl.hostname}${port !== '80' && port !== '443' ? `:${port}` : ''}/client`;
+            logger.info(`Port détecté depuis Referer: ${port}`);
+          }
+        } catch (e) {
+          logger.info(`Erreur lors de la détection du port depuis Referer: ${e.message}`);
+        }
+        
+        // 2. Fallback sur l'en-tête Origin
+        if (!redirectUrl) {
+          const origin = request.headers.origin as string;
+          if (origin) {
+            redirectUrl = `${origin}/client`;
+            logger.info(`Utilisation de l'Origin: ${origin}`);
+          }
+        }
+        
+        // 3. Fallback obligatoire si aucune autre méthode ne fonctionne
+        if (!redirectUrl) {
+          // Utiliser l'host de la requête mais remplacer le port backend par le port frontend
+          const hostname = request.hostname.split(':')[0];
+          const frontendPort = request.headers.host?.includes(':3010') ? '3010' : '3010'; // Port frontend par défaut
+          redirectUrl = `${request.protocol}://${hostname}:${frontendPort}/client`;
+          logger.info(`Fallback obligatoire: redirection vers ${redirectUrl}`);
+        }
+        
         logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);
         
         // Envoyer une page HTML avec redirection automatique

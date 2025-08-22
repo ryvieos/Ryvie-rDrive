@@ -12,7 +12,8 @@
     "dev:linter": "eslint src/",
     "test": "CI=true craco test --passWithNoTests",
     "start": "npm run dev:start",
-    "build": "npm run build-storybook && CI=false craco --max_old_space_size=4096 --optimize-for-size build",
+    "build": "CI=false craco --max_old_space_size=4096 --optimize-for-size build",
+    "build:prod": "CI=false craco --max_old_space_size=4096 --optimize-for-size build",
     "build-storybook": "build-storybook -o public/storybook",
     "storybook": "concurrently \"start-storybook -p 6006 -s public\" \"npm run dev:tailwind\""
   },
@@ -110,7 +111,6 @@
     "@types/react-redux": "^7.1.7",
     "@types/react-router-dom": "^5.1.6",
     "@types/react-test-renderer": "^16.9.3",
-    "@types/redux": "^3.6.31",
     "@types/semaphore": "^1.1.0",
     "@types/socket.io-client": "^1.4.34",
     "@types/tailwindcss": "^3.0.10",

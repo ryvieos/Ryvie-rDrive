@@ -83,7 +83,7 @@ services:
       - SSL_CERTS=off
       - NODE_HOST=http://node:4000
     ports:
-      - 3000:80
+      - 3010:80
       - 8443:443
     depends_on:
       node:
