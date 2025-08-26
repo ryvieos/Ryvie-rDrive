@@ -18,6 +18,20 @@ ENV GENERATE_SOURCEMAP=false \
     TSC_COMPILE_ON_ERROR=true \
     SKIP_PREFLIGHT_CHECK=true
 
+# Build args fournis par docker-compose pour injecter les URLs au build React
+ARG REACT_APP_FRONTEND_URL
+ARG REACT_APP_BACKEND_URL
+ARG REACT_APP_WEBSOCKET_URL
+ARG REACT_APP_ONLYOFFICE_CONNECTOR_URL
+ARG REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL
+
+# Expose ces variables au process de build CRA
+ENV REACT_APP_FRONTEND_URL=${REACT_APP_FRONTEND_URL}
+ENV REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
+ENV REACT_APP_WEBSOCKET_URL=${REACT_APP_WEBSOCKET_URL}
+ENV REACT_APP_ONLYOFFICE_CONNECTOR_URL=${REACT_APP_ONLYOFFICE_CONNECTOR_URL}
+ENV REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL=${REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL}
+
 # Copie de l'env si présent (sinon ne pas casser le build)
 RUN if [ -f src/app/environment/environment.ts.dist ]; then \
       cp src/app/environment/environment.ts.dist src/app/environment/environment.ts; \
@@ -49,3 +63,4 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 EXPOSE 80
 EXPOSE 443
+

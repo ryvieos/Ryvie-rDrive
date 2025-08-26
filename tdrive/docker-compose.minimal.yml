@@ -77,6 +77,12 @@ services:
     build:
       context: .
       dockerfile: docker/tdrive-frontend/Dockerfile
+      args:
+        REACT_APP_FRONTEND_URL: "https://rdrive.demo.ryvie.fr"
+        REACT_APP_BACKEND_URL: "https://backend.rdrive.demo.ryvie.fr"
+        REACT_APP_WEBSOCKET_URL: "wss://backend.rdrive.demo.ryvie.fr/ws"
+        REACT_APP_ONLYOFFICE_CONNECTOR_URL: "https://connector.rdrive.demo.ryvie.fr"
+        REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL: "https://document.rdrive.demo.ryvie.fr"
     container_name: app-rdrive-frontend
     environment:
       - DEV=production
