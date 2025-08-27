@@ -133,7 +133,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     
     try {
       const remotePath = `${this.REMOTE_NAME}:${folderPath}`;
-      const cmd = `rclone lsjson "${remotePath}" --max-depth 1`;
+      const cmd = `rclone --config /root/.config/rclone/rclone.conf lsjson "${remotePath}" --max-depth 1`;
       
       const result = await new Promise<string>((resolve, reject) => {
         exec(cmd, (error, stdout, stderr) => {
@@ -415,8 +415,8 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
       const remotePath = `${actualRemoteName}:${path}`;
       // Ajouter --hash pour Google Drive pour obtenir plus d'informations sur les fichiers
       const cmd = provider === 'googledrive' 
-        ? `rclone lsjson "${remotePath}" --hash`
-        : `rclone lsjson "${remotePath}"`;
+        ? `rclone --config /root/.config/rclone/rclone.conf lsjson "${remotePath}" --hash`
+        : `rclone --config /root/.config/rclone/rclone.conf lsjson "${remotePath}"`;
       
       logger.info(`🔧 Executing ${provider} rclone command:`, cmd);
       
