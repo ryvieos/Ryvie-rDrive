@@ -19,7 +19,6 @@ import { useDriveItem } from '../../../features/drive/hooks/use-drive-item';
 import { DriveCurrentFolderAtom } from '../body/drive/browser';
 import { DriveNavigationState } from '../../../features/drive/state/store';
 import Account from '../common/account';
-import AppGrid from '../common/app-grid';
 import DiskUsage from '../common/disk-usage';
 import Actions from './actions';
 import { useHistory } from 'react-router-dom';
@@ -185,9 +184,6 @@ export default () => {
             </div>
             <div className="md:grow order-3 md:order-2">
               <Account />
-            </div>
-            <div className="order-2 md:order-3 mr-2 md:mr-0">
-              <AppGrid />
             </div>
           </div>
 
