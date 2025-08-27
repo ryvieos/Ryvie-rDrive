@@ -28,6 +28,11 @@ export const useCloudFiles = () => {
           if (!user?.email) {
             throw new Error('Utilisateur non connecté');
           }
+          // Vérifier que le token JWT est disponible (vue publique ou non authentifiée)
+          const authHeader = JWTStorage.getAutorizationHeader();
+          if (!authHeader) {
+            throw new Error('Token JWT manquant');
+          }
           
           logger.info(`📧 Récupération des fichiers ${provider} pour:`, user.email);
           
@@ -37,7 +42,7 @@ export const useCloudFiles = () => {
             headers: {
               'Accept': 'application/json',
               'Content-Type': 'application/json',
-              'Authorization': JWTStorage.getAutorizationHeader()
+              'Authorization': authHeader
             }
           });
           
