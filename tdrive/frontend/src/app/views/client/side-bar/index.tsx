@@ -93,16 +93,12 @@ export default () => {
   const [connectingGoogleDrive, setConnectingGoogleDrive] = useState(false);
   const [dropboxConnected, setDropboxConnected] = useState(false);
   const [googleDriveConnected, setGoogleDriveConnected] = useState(false);
-  const canUseCloud = !!(user?.email && JWTStorage.getAutorizationHeader() && company);
   
   // Détecter l'état de connexion basé sur la navigation et localStorage
   useEffect(() => {
     // Vérification réelle de la connexion backend pour chaque provider
     const checkRealConnections = async () => {
-      if (!canUseCloud) {
-        // Ne pas tenter de vérifier en contexte public/sans auth/without company
-        return;
-      }
+      if (!user?.email) return;
       
       // Utiliser des chemins relatifs /api pour passer par le reverse proxy Nginx
       const backendUrl = '';
@@ -160,7 +156,7 @@ export default () => {
     };
     
     checkRealConnections();
-  }, [canUseCloud]);
+  }, [user?.email]);
 
 
 
@@ -280,7 +276,6 @@ export default () => {
         </Button>
 
         {/* Bouton Dropbox dynamique */}
-        {canUseCloud && (
         <Button
           onClick={async () => {
             if (!user) {
@@ -340,10 +335,7 @@ export default () => {
               : 'Connect your Dropbox'}
         </Button>
 
-        )}
-
         {/* Bouton Google Drive dynamique */}
-        {canUseCloud && (
         <Button
           onClick={async () => {
             if (!user) {
@@ -402,8 +394,6 @@ export default () => {
               ? 'My Google Drive' 
               : 'Connect your Google Drive'}
         </Button>
-
-        )}
 
         {false && (
           <>
