@@ -29,7 +29,8 @@ export const useCloudImport = () => {
     currentFile: string;
   } | null>(null);
 
-  const backendUrl = `${window.location.protocol}//${window.location.hostname}:4000`;
+  // Utiliser des chemins relatifs pour passer par Nginx (/api)
+  const backendUrl = '';
   const authHeader = JWTStorage.getAutorizationHeader();
 
   /**

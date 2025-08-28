@@ -19,7 +19,6 @@ import { useDriveItem } from '../../../features/drive/hooks/use-drive-item';
 import { DriveCurrentFolderAtom } from '../body/drive/browser';
 import { DriveNavigationState } from '../../../features/drive/state/store';
 import Account from '../common/account';
-import AppGrid from '../common/app-grid';
 import DiskUsage from '../common/disk-usage';
 import Actions from './actions';
 import { useHistory } from 'react-router-dom';
@@ -101,7 +100,8 @@ export default () => {
     const checkRealConnections = async () => {
       if (!user?.email) return;
       
-      const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
+      // Utiliser des chemins relatifs /api pour passer par le reverse proxy Nginx
+      const backendUrl = '';
       const userEmail = encodeURIComponent(user.email);
       
       // Vérifier Dropbox
@@ -184,9 +184,6 @@ export default () => {
             </div>
             <div className="md:grow order-3 md:order-2">
               <Account />
-            </div>
-            <div className="order-2 md:order-3 mr-2 md:mr-0">
-              <AppGrid />
             </div>
           </div>
 
@@ -296,9 +293,9 @@ export default () => {
               try {
                 console.log('🔗 Connexion Dropbox pour l\'utilisateur:', user);
                 
-                const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
                 const userEmail = encodeURIComponent(user.email);
-                const response = await fetch(`${backendUrl}/v1/drivers/Dropbox?userEmail=${userEmail}`);
+                // Appeler l'endpoint via le proxy: /api/v1/drivers/Dropbox
+                const response = await fetch(`/api/v1/drivers/Dropbox?userEmail=${userEmail}`);
                 
                 if (!response.ok) {
                   throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -356,9 +353,9 @@ export default () => {
               try {
                 console.log('🔗 Connexion Google Drive pour l\'utilisateur:', user);
                 
-                const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
                 const userEmail = encodeURIComponent(user.email);
-                const response = await fetch(`${backendUrl}/v1/drivers/GoogleDrive?userEmail=${userEmail}`);
+                // Appeler l'endpoint via le proxy: /api/v1/drivers/GoogleDrive
+                const response = await fetch(`/api/v1/drivers/GoogleDrive?userEmail=${userEmail}`);
                 
                 if (!response.ok) {
                   throw new Error(`HTTP ${response.status}: ${response.statusText}`);

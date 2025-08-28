@@ -606,24 +606,6 @@ export default memo(
                   </Button>
                 )}
                 
-                {/* Bouton d'import Dropbox dans My Drive */}
-                {!isDropboxView && viewId === 'user_' + user?.id && buttonsVisible && (
-                  <Button
-                    theme="outline"
-                    className="ml-4 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-500 px-0 md:px-4"
-                    onClick={() => importDropboxFolder('', 'user_' + user?.id)}
-                    disabled={importingDropbox}
-                    testClassId="button-import-dropbox"
-                  >
-                    <RefreshIcon 
-                      className={`h-4 w-4 mr-2 -ml-1 ${importingDropbox ? 'animate-spin' : ''}`} 
-                    />
-                    <span>
-                      {importingDropbox ? 'Import en cours...' : 'Importer depuis Dropbox'}
-                    </span>
-                  </Button>
-                )}
-                
                 {viewId !== 'shared_with_me' && buttonsVisible && (
                   <Menu menu={() => onBuildContextMenu(details)} testClassId="browser-menu-more">
                     {' '}

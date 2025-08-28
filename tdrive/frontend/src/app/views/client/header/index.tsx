@@ -1,6 +1,5 @@
 import { MenuIcon } from '@heroicons/react/outline';
 import Account from '../common/account';
-import AppGrid from '../common/app-grid';
 import Search from '../common/search';
 import { Info } from "@atoms/text";
 import version from '../../../environment/version';
@@ -45,9 +44,6 @@ export default ({ openSideMenu }: { openSideMenu: () => void }) => {
       </div>
 
       <div className="sm:block hidden grow"></div>
-      <div className="sm:block">
-        <AppGrid className="mr-4" />
-      </div>
       <Account />
     </div>
   );

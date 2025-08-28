@@ -225,22 +225,15 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
   async getAuthUrl(request?: any): Promise<string> {
     const redirectUri = encodeURIComponent(this.PROXY);
     
-    // Générer l'URL de callback dynamiquement pour pointer vers le backend
-    // mais en utilisant l'adresse accessible depuis l'extérieur
-    let callbackBase = '/v1/recover/Dropbox';
+    // Construire une URL de callback publique correcte derrière proxy
+    // Préférer les en-têtes X-Forwarded-* (fournis par Nginx) et utiliser le préfixe /api/v1
+    let callbackBase = '/api/v1/recover/Dropbox';
     if (request) {
-      const protocol = request.protocol || 'http';
-      let host = request.headers.host || 'localhost:4000';
-      
-      // Si l'host contient le port 4000 (backend), on le remplace par 4000
-      // pour s'assurer que le callback pointe vers le backend
-      if (host.includes(':3000')) {
-        host = host.replace(':3000', ':4000');
-      } else if (!host.includes(':')) {
-        host = `${host}:4000`;
-      }
-      
-      callbackBase = `${protocol}://${host}/v1/recover/Dropbox`;
+      const xfProto = (request.headers?.['x-forwarded-proto'] as string) || request.protocol || 'http';
+      const xfHost = (request.headers?.['x-forwarded-host'] as string) || request.headers?.host || 'localhost';
+      const protocol = xfProto.split(',')[0].trim();
+      const host = xfHost.split(',')[0].trim();
+      callbackBase = `${protocol}://${host}/api/v1/recover/Dropbox`;
     }
     
     const state = encodeURIComponent(callbackBase);
@@ -269,20 +262,14 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
   async getGoogleDriveAuthUrl(request?: any): Promise<string> {
     const redirectUri = encodeURIComponent(this.PROXY);
     
-    // Générer l'URL de callback dynamiquement pour pointer vers le backend Google Drive
-    let callbackBase = '/v1/recover/GoogleDrive';
+    // Construire une URL de callback publique correcte derrière proxy pour Google Drive
+    let callbackBase = '/api/v1/recover/GoogleDrive';
     if (request) {
-      const protocol = request.protocol || 'http';
-      let host = request.headers.host || 'localhost:4000';
-      
-      // Si l'host contient le port 3000 (frontend), on le remplace par 4000 (backend)
-      if (host.includes(':3000')) {
-        host = host.replace(':3000', ':4000');
-      } else if (!host.includes(':')) {
-        host = `${host}:4000`;
-      }
-      
-      callbackBase = `${protocol}://${host}/v1/recover/GoogleDrive`;
+      const xfProto = (request.headers?.['x-forwarded-proto'] as string) || request.protocol || 'http';
+      const xfHost = (request.headers?.['x-forwarded-host'] as string) || request.headers?.host || 'localhost';
+      const protocol = xfProto.split(',')[0].trim();
+      const host = xfHost.split(',')[0].trim();
+      callbackBase = `${protocol}://${host}/api/v1/recover/GoogleDrive`;
     }
     
     const state = encodeURIComponent(callbackBase);
@@ -1002,9 +989,8 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     const apiPrefix = "/api/v1";
     
     // 1) Generate AuthUrl for Dropbox OAuth
-    // Le frontend appelle /v1/drivers/Dropbox (sans le préfixe api)
-    // ... (le reste du code reste inchangé)
-    fastify.get(`/v1/drivers/Dropbox`, async (request: any, reply) => {
+    // Le frontend appelle /api/v1/drivers/Dropbox
+    fastify.get(`${apiPrefix}/drivers/Dropbox`, async (request: any, reply) => {
       // Récupérer l'email utilisateur depuis les query parameters
       const userEmail = request.query.userEmail as string || 'default@user.com';
       logger.info('📧 Email utilisateur reçu:', userEmail);
@@ -1023,8 +1009,8 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     });
     
     // 2) OAuth callback
-    // Le frontend s'attend à recevoir une redirection vers cette route
-    fastify.get(`/v1/recover/Dropbox`, async (request: any, reply) => {
+    // Le frontend s'attend à recevoir une redirection vers cette route (/api/v1)
+    fastify.get(`${apiPrefix}/recover/Dropbox`, async (request: any, reply) => {
       const fullUrl = `${request.protocol}://${request.hostname}${request.url}`;
       logger.info('🔔 Callback received:', fullUrl);
 
@@ -1079,38 +1065,48 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         });
 
         // Redirection automatique vers rdrive après authentification réussie
-        // Détecter le port d'origine pour une redirection dynamique
+        // 1) Priorité: en-têtes X-Forwarded-* fournis par Nginx (préservent le port)
         let redirectUrl: string;
-        
-        try {
-          // 1. Essayer de récupérer le port depuis le Referer
-          const referer = request.headers.referer as string;
-          if (referer) {
-            const refererUrl = new URL(referer);
-            const port = refererUrl.port || (refererUrl.protocol === 'https:' ? '443' : '80');
-            redirectUrl = `${refererUrl.protocol}//${refererUrl.hostname}${port !== '80' && port !== '443' ? `:${port}` : ''}/client`;
-            logger.info(`Port détecté depuis Referer: ${port}`);
-          }
-        } catch (e) {
-          logger.info(`Erreur lors de la détection du port depuis Referer: ${e.message}`);
+        const xfProtoHeader = request.headers?.['x-forwarded-proto'] as string | undefined;
+        const xfHostHeader = request.headers?.['x-forwarded-host'] as string | undefined;
+        const xfProto = xfProtoHeader ? xfProtoHeader.split(',')[0].trim() : undefined;
+        const xfHost = xfHostHeader ? xfHostHeader.split(',')[0].trim() : undefined;
+        if (xfProto && xfHost) {
+          redirectUrl = `${xfProto}://${xfHost}/client`;
+          logger.info(`Redirection via X-Forwarded headers: ${redirectUrl}`);
         }
         
-        // 2. Fallback sur l'en-tête Origin
+        // 2) Fallback: Origin
         if (!redirectUrl) {
-          const origin = request.headers.origin as string;
+          const origin = request.headers.origin as string | undefined;
           if (origin) {
             redirectUrl = `${origin}/client`;
-            logger.info(`Utilisation de l'Origin: ${origin}`);
+            logger.info(`Redirection via Origin: ${redirectUrl}`);
           }
         }
         
-        // 3. Fallback obligatoire si aucune autre méthode ne fonctionne
+        // 3) Fallback: Referer
         if (!redirectUrl) {
-          // Utiliser l'host de la requête mais remplacer le port backend par le port frontend
-          const hostname = request.hostname.split(':')[0];
-          const frontendPort = request.headers.host?.includes(':3010') ? '3010' : '3010'; // Port frontend par défaut
-          redirectUrl = `${request.protocol}://${hostname}:${frontendPort}/client`;
-          logger.info(`Fallback obligatoire: redirection vers ${redirectUrl}`);
+          try {
+            const referer = request.headers.referer as string | undefined;
+            if (referer) {
+              const refererUrl = new URL(referer);
+              const port = refererUrl.port;
+              const hostWithPort = port ? `${refererUrl.hostname}:${port}` : refererUrl.hostname;
+              redirectUrl = `${refererUrl.protocol}//${hostWithPort}/client`;
+              logger.info(`Redirection via Referer: ${redirectUrl}`);
+            }
+          } catch (e) {
+            logger.info(`Erreur lors du parsing du Referer: ${e.message}`);
+          }
+        }
+        
+        // 4) Fallback final: Host + protocol de la requête
+        if (!redirectUrl) {
+          const reqHost = request.headers.host || request.hostname;
+          const reqProto = (request.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || request.protocol || 'http';
+          redirectUrl = `${reqProto}://${reqHost}/client`;
+          logger.info(`Fallback final: ${redirectUrl}`);
         }
         
         logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);
@@ -1742,7 +1738,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     // ========== GOOGLE DRIVE ROUTES ==========
     
     // 1) Generate AuthUrl for Google Drive OAuth
-    fastify.get(`/v1/drivers/GoogleDrive`, async (request: any, reply) => {
+    fastify.get(`${apiPrefix}/drivers/GoogleDrive`, async (request: any, reply) => {
       // Récupérer l'email utilisateur depuis les query parameters
       const userEmail = request.query.userEmail as string || 'default@user.com';
       logger.info('📧 Email utilisateur reçu pour Google Drive:', userEmail);
@@ -1759,7 +1755,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     });
     
     // 2) OAuth callback for Google Drive
-    fastify.get(`/v1/recover/GoogleDrive`, async (request: any, reply) => {
+    fastify.get(`${apiPrefix}/recover/GoogleDrive`, async (request: any, reply) => {
       const fullUrl = `${request.protocol}://${request.hostname}${request.url}`;
       logger.info('🔔 Google Drive Callback received:', fullUrl);
 
@@ -1813,38 +1809,48 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         });
 
         // Redirection automatique vers rdrive après authentification réussie
-        // Détecter le port d'origine pour une redirection dynamique
+        // 1) Priorité: en-têtes X-Forwarded-* fournis par Nginx (préservent le port)
         let redirectUrl: string;
-        
-        try {
-          // 1. Essayer de récupérer le port depuis le Referer
-          const referer = request.headers.referer as string;
-          if (referer) {
-            const refererUrl = new URL(referer);
-            const port = refererUrl.port || (refererUrl.protocol === 'https:' ? '443' : '80');
-            redirectUrl = `${refererUrl.protocol}//${refererUrl.hostname}${port !== '80' && port !== '443' ? `:${port}` : ''}/client`;
-            logger.info(`Port détecté depuis Referer: ${port}`);
-          }
-        } catch (e) {
-          logger.info(`Erreur lors de la détection du port depuis Referer: ${e.message}`);
+        const gXfProtoHeader = request.headers?.['x-forwarded-proto'] as string | undefined;
+        const gXfHostHeader = request.headers?.['x-forwarded-host'] as string | undefined;
+        const gXfProto = gXfProtoHeader ? gXfProtoHeader.split(',')[0].trim() : undefined;
+        const gXfHost = gXfHostHeader ? gXfHostHeader.split(',')[0].trim() : undefined;
+        if (gXfProto && gXfHost) {
+          redirectUrl = `${gXfProto}://${gXfHost}/client`;
+          logger.info(`Redirection via X-Forwarded headers (GDrive): ${redirectUrl}`);
         }
         
-        // 2. Fallback sur l'en-tête Origin
+        // 2) Fallback: Origin
         if (!redirectUrl) {
-          const origin = request.headers.origin as string;
+          const origin = request.headers.origin as string | undefined;
           if (origin) {
             redirectUrl = `${origin}/client`;
-            logger.info(`Utilisation de l'Origin: ${origin}`);
+            logger.info(`Redirection via Origin (GDrive): ${redirectUrl}`);
           }
         }
         
-        // 3. Fallback obligatoire si aucune autre méthode ne fonctionne
+        // 3) Fallback: Referer
         if (!redirectUrl) {
-          // Utiliser l'host de la requête mais remplacer le port backend par le port frontend
-          const hostname = request.hostname.split(':')[0];
-          const frontendPort = request.headers.host?.includes(':3010') ? '3010' : '3010'; // Port frontend par défaut
-          redirectUrl = `${request.protocol}://${hostname}:${frontendPort}/client`;
-          logger.info(`Fallback obligatoire: redirection vers ${redirectUrl}`);
+          try {
+            const referer = request.headers.referer as string | undefined;
+            if (referer) {
+              const refererUrl = new URL(referer);
+              const port = refererUrl.port;
+              const hostWithPort = port ? `${refererUrl.hostname}:${port}` : refererUrl.hostname;
+              redirectUrl = `${refererUrl.protocol}//${hostWithPort}/client`;
+              logger.info(`Redirection via Referer (GDrive): ${redirectUrl}`);
+            }
+          } catch (e) {
+            logger.info(`Erreur lors du parsing du Referer (GDrive): ${e.message}`);
+          }
+        }
+        
+        // 4) Fallback final: Host + protocol de la requête
+        if (!redirectUrl) {
+          const reqHost = request.headers.host || request.hostname;
+          const reqProto = (request.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || request.protocol || 'http';
+          redirectUrl = `${reqProto}://${reqHost}/client`;
+          logger.info(`Fallback final (GDrive): ${redirectUrl}`);
         }
         
         logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);

@@ -31,9 +31,8 @@ export const useCloudFiles = () => {
           
           logger.info(`📧 Récupération des fichiers ${provider} pour:`, user.email);
           
-          // Construire l'URL du backend dynamiquement avec le provider
-          const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
-          const response = await fetch(`${backendUrl}/api/v1/files/rclone/list?path=${encodeURIComponent(path)}&userEmail=${encodeURIComponent(user.email)}&provider=${provider}`, {
+          // Utiliser un chemin relatif pour passer par Nginx (/api)
+          const response = await fetch(`/api/v1/files/rclone/list?path=${encodeURIComponent(path)}&userEmail=${encodeURIComponent(user.email)}&provider=${provider}`, {
             method: 'GET',
             headers: {
               'Accept': 'application/json',
