@@ -3,6 +3,7 @@ version: "3.4"
 services:
   mongo:
     container_name: app-rdrive-mongo
+    restart: unless-stopped
     image: mongo
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
@@ -20,6 +21,7 @@ services:
 
   node_create_user:
     container_name: app-rdrive-node-create-user
+    restart: unless-stopped
     build: &backend_docker_build
       context: .
       dockerfile: docker/tdrive-node/Dockerfile
@@ -57,6 +59,7 @@ services:
 
   node:
     container_name: app-rdrive-node
+    restart: unless-stopped
     build: *backend_docker_build
     ports:
       - 4000:4000
