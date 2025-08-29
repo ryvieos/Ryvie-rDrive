@@ -12,7 +12,7 @@ import OtherDisplay from './other/display';
 import LinkDisplay from './link/display';
 
 export default (): React.ReactElement => {
-  const { download, type, name, id } = useDrivePreviewDisplayData();
+  const { download, type, name, id, extension } = useDrivePreviewDisplayData();
   const { isOpen } = useDrivePreviewModal();
   const { loading, setLoading } = useDrivePreviewLoading();
 
@@ -20,12 +20,11 @@ export default (): React.ReactElement => {
     return <></>;
   }
 
-  if (!type) {
-    return (
-      <div className="text-white m-auto w-full text-center h-full flex items-center">
-        <span className="block w-full text-center">We can't display this document.</span>
-      </div>
-    );
+  // If type is not resolved yet, try Office/Other display based on extension instead of failing
+  const officeExts: string[] = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'];
+  const normalizedExt = String(extension || '').toLowerCase();
+  if (!type && normalizedExt && officeExts.includes(normalizedExt)) {
+    return <OtherDisplay download={download} name={name} id={id} />;
   }
 
   switch (type) {
