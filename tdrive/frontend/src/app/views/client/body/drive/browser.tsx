@@ -230,6 +230,77 @@ export default memo(
     );
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
+    // Marquee selection state
+    const [isSelecting, setIsSelecting] = useState(false);
+    const [selectOrigin, setSelectOrigin] = useState<{ x: number; y: number } | null>(null);
+    const [selectRect, setSelectRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+
+    const updateSelectionFromRect = useCallback((rect: DOMRect) => {
+      const container = scrollViewer.current;
+      if (!container) return;
+      const elements = Array.from(container.querySelectorAll('[id^="DR-"]')) as HTMLElement[];
+      const nextChecked: Record<string, boolean> = {};
+      elements.forEach(el => {
+        const elRect = el.getBoundingClientRect();
+        const intersect = !(rect.right < elRect.left || rect.left > elRect.right || rect.bottom < elRect.top || rect.top > elRect.bottom);
+        if (intersect) {
+          const id = el.id.replace('DR-', '');
+          nextChecked[id] = true;
+        }
+      });
+      setChecked(nextChecked);
+    }, [setChecked]);
+
+    const onMouseDownScroll = useCallback((e: React.MouseEvent) => {
+      if (e.button !== 0) return; // only left click
+      const container = scrollViewer.current;
+      if (!container) return;
+      // start selection when dragging on the background, not on items
+      const target = e.target as HTMLElement;
+      const inItem = target.closest('[id^="DR-"]');
+      if (inItem) return;
+      // Background click: clear current selection immediately
+      setChecked({});
+      const startX = e.clientX;
+      const startY = e.clientY;
+      setIsSelecting(true);
+      setSelectOrigin({ x: startX, y: startY });
+      setSelectRect({ left: startX, top: startY, width: 0, height: 0 });
+      e.preventDefault();
+    }, []);
+
+    const onMouseMoveWindow = useCallback((e: MouseEvent) => {
+      if (!isSelecting || !selectOrigin) return;
+      const x1 = selectOrigin.x;
+      const y1 = selectOrigin.y;
+      const x2 = e.clientX;
+      const y2 = e.clientY;
+      const left = Math.min(x1, x2);
+      const top = Math.min(y1, y2);
+      const width = Math.abs(x2 - x1);
+      const height = Math.abs(y2 - y1);
+      setSelectRect({ left, top, width, height });
+      const rect = new DOMRect(left, top, width, height);
+      updateSelectionFromRect(rect);
+    }, [isSelecting, selectOrigin, updateSelectionFromRect]);
+
+    const onMouseUpWindow = useCallback(() => {
+      if (!isSelecting) return;
+      setIsSelecting(false);
+      setSelectOrigin(null);
+      // keep the final rect briefly (optional), then clear it
+      setTimeout(() => setSelectRect(null), 0);
+    }, [isSelecting]);
+
+    useEffect(() => {
+      window.addEventListener('mousemove', onMouseMoveWindow);
+      window.addEventListener('mouseup', onMouseUpWindow);
+      return () => {
+        window.removeEventListener('mousemove', onMouseMoveWindow);
+        window.removeEventListener('mouseup', onMouseUpWindow);
+      };
+    }, [onMouseMoveWindow, onMouseUpWindow]);
+
     function handleDragStart(event: any) {
       setActiveIndex(event.active.id);
       setActiveChild(event.active.data.current.child.props.item);
@@ -719,7 +790,7 @@ export default memo(
               </div>
 
               <DndContext sensors={sensors} onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
-                <div className="grow overflow-auto" ref={scrollViewer}>
+                <div className="grow overflow-auto relative" ref={scrollViewer} onMouseDown={onMouseDownScroll}>
                   {/* Indicateur de navigation instantanée */}
                   {isNavigatingInstantly && (
                     <div className="flex items-center justify-center py-4 text-blue-500">
@@ -829,6 +900,21 @@ export default memo(
                       ></DocumentRowOverlay>
                     ) : null}
                   </DragOverlay>
+                  {selectRect && (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: selectRect.left,
+                        top: selectRect.top,
+                        width: selectRect.width,
+                        height: selectRect.height,
+                        border: '1px dashed rgba(59,130,246,0.9)',
+                        background: 'rgba(59,130,246,0.12)',
+                        pointerEvents: 'none',
+                        zIndex: 50,
+                      }}
+                    />
+                  )}
                   {loading && <FolderRowSkeleton />}
                 </div>
               </DndContext>

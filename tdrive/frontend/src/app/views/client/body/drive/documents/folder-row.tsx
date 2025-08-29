@@ -33,6 +33,7 @@ export const FolderRow = memo(({
         (className || '') + ' ' +
         'testid:folder-row'
       }
+      id={`DR-${item.id}`}
       onMouseEnter={useCallback(() => setHover(true), [])}
       onMouseLeave={useCallback(() => setHover(false), [])}
       onClick={useCallback((e: React.MouseEvent) => {

@@ -408,6 +408,15 @@ export const useOnBuildContextMenu = (
               ]
             : [
                 {
+                  testClassId: 'create-folder',
+                  type: 'menu',
+                  text: Languages.t('components.create_modal.create_folder'),
+                  hide: inTrash || parent.access === 'read',
+                  onClick: () =>
+                    parent?.item?.id &&
+                    setCreationModalState({ open: true, parent_id: parent?.item?.id, type: 'folder' }),
+                },
+                {
                   testClassId: 'add-documents',
                   type: 'menu',
                   text: Languages.t('components.item_context_menu.add_documents'),

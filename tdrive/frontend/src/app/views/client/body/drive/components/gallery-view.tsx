@@ -35,7 +35,8 @@ export const GalleryView: React.FC<GalleryViewProps> = memo(
             return (
               <div
                 key={item.id}
-                className={`group relative rounded-lg border border-zinc-200 hover:border-blue-300 bg-white hover:shadow-sm transition ring-1 ring-transparent ${isChecked ? 'ring-blue-400 ring-2' : ''}`}
+                id={`DR-${item.id}`}
+                className={`group drive-grid-item relative rounded-lg border border-zinc-200 hover:border-blue-300 bg-white hover:shadow-sm transition ring-1 ring-transparent ${isChecked ? 'ring-blue-400 ring-2' : ''}`}
                 onClick={() => (isDir ? onOpenFolder(item.id) : onOpenFile && onOpenFile(item.id))}
                 onContextMenu={evt => onContextMenu && onContextMenu(item, evt)}
               >
