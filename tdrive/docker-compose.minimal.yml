@@ -79,7 +79,6 @@ services:
     build:
       context: .
       dockerfile: docker/tdrive-frontend/Dockerfile
-      restart: unless-stopped
       args:
         REACT_APP_FRONTEND_URL: "https://rdrive.demo.ryvie.fr"
         REACT_APP_BACKEND_URL: "https://backend.rdrive.demo.ryvie.fr"
@@ -94,6 +93,7 @@ services:
     ports:
       - 3010:80
       - 8443:443
+    restart: unless-stopped
     depends_on:
       node:
         condition: service_healthy
