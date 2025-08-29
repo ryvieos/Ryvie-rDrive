@@ -360,7 +360,6 @@
     "scenes.login.create_account.username": "Nom d'utilisateur",
     "scenes.login.create_account.username_already_exist": "Ce nom d'utilisateur est déjà utilisé",
     "scenes.login.footer.branding": "Vous êtes sur un serveur privé rDrive appartenant à {{$1}} ({{$2}}). ",
-    "scenes.login.footer.go_to_tdrive": "Aller à drive.twake.app",
     "scenes.login.home.create_account": "Créer un compte",
     "scenes.login.home.email": "Email",
     "scenes.login.home.login_btn": "S'identifier",
@@ -375,5 +374,11 @@
     "services.console_services.toaster.success_invite_emails": "{{$1}} utilisateur(s) ajouté(s) avec succès",
     "services.console_services.toaster.success_verify_email": "Un lien de vérification a été envoyé à votre compte de messagerie",
     "services.user.notification_parameters_update_alert": "Les paramètres de notification ont été mis à jour.",
-    "services.user.update_password_alert": "Votre mot de passe a été mis à jour."
+    "services.user.update_password_alert": "Votre mot de passe a été mis à jour.",
+    "drive.dropbox.connect_button": "Connectez votre Dropbox",
+    "drive.dropbox.redirecting": "Redirection…",
+    "drive.dropbox.my_drive": "Mon Dropbox",
+    "drive.googledrive.connect_button": "Connectez votre Google Drive",
+    "drive.googledrive.redirecting": "Redirection vers Google Drive…",
+    "drive.googledrive.my_drive": "Mon Google Drive"
 }

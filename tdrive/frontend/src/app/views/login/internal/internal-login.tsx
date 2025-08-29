@@ -45,7 +45,7 @@ export default () => {
       {LoginService.state === 'signin' && <Signin />}
 
       <div className={'app_version_footer '}>
-        <div className="version_name fade_in">Tdrive {Globals.version.version_name}</div>
+        <div className="version_name fade_in">rDrive {Globals.version.version_name}</div>
         <div style={{ height: 20 }}>
           {server_infos_loaded && server_infos?.configuration?.branding?.name && (
             <div className="smalltext fade_in">
@@ -54,19 +54,8 @@ export default () => {
                   server_infos?.configuration?.branding?.name,
                   server_infos?.configuration?.branding.link || 'tdrive.app',
                 ])}
-              <Typography.Link onClick={() => window.open('https://drive.twake.app', 'blank')}>
-                {Languages.t('scenes.login.footer.go_to_tdrive')}
-              </Typography.Link>
               {' - ' + Globals.version.version}
             </div>
-          )}
-          {server_infos_loaded && !server_infos?.configuration?.branding?.name && (
-            <Typography.Link
-              className="fade_in"
-              onClick={() => window.open('https://drive.twake.app', 'blank')}
-            >
-              {Languages.t('scenes.login.footer.go_to_tdrive')}
-            </Typography.Link>
           )}
         </div>
       </div>

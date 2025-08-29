@@ -9,3 +9,4 @@
 export const detect = async (_path: string): Promise<boolean> => {
   // Toujours indiquer que l'app desktop n'est pas détectée pour éviter tout popup
   return false;
+};

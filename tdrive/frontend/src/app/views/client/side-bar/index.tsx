@@ -223,7 +223,7 @@ export default () => {
             }
             testClassId="sidebar-menu-shared-drive"
           >
-            <CloudIcon className="w-5 h-5 mr-4" /> Shared Drive
+            <CloudIcon className="w-5 h-5 mr-4" /> {Languages.t('components.side_menu.home')}
           </Button>
         )}
         {FeatureTogglesService.isActiveFeatureName(FeatureNames.COMPANY_MANAGE_ACCESS) && (
@@ -329,10 +329,10 @@ export default () => {
             className="w-5 h-5 mr-4"
           />
           {connectingDropbox 
-            ? 'Redirecting to Dropbox...' 
+            ? Languages.t('drive.dropbox.redirecting')
             : dropboxConnected 
-              ? 'My Dropbox' 
-              : 'Connect your Dropbox'}
+              ? Languages.t('drive.dropbox.my_drive')
+              : Languages.t('drive.dropbox.connect_button')}
         </Button>
 
         {/* Bouton Google Drive dynamique */}
@@ -389,10 +389,10 @@ export default () => {
             className="w-5 h-5 mr-4"
           />
           {connectingGoogleDrive 
-            ? 'Redirecting to Google Drive...' 
+            ? Languages.t('drive.googledrive.redirecting')
             : googleDriveConnected 
-              ? 'My Google Drive' 
-              : 'Connect your Google Drive'}
+              ? Languages.t('drive.googledrive.my_drive')
+              : Languages.t('drive.googledrive.connect_button')}
         </Button>
 
         {false && (

@@ -10,18 +10,30 @@ export default class Numbers {
 
   static humanFileSize(bytes: number, si: boolean) {
     const thresh = si ? 1000 : 1024;
+    const isFr = (typeof navigator !== 'undefined' && navigator.language)
+      ? navigator.language.toLowerCase().startsWith('fr')
+      : false;
+
     if (Math.abs(bytes) < thresh) {
-      return bytes + ' B';
+      // Bytes label localized
+      return isFr ? `${bytes} o` : bytes + ' B';
     }
-    const units = si
-      ? ['kb', 'mb', 'gb', 'gb', 'pb', 'eb', 'zb', 'yb']
-      : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+
+    // Units localized for French, otherwise keep existing style
+    const units = isFr
+      ? ['Ko', 'Mo', 'Go', 'To', 'Po', 'Eo', 'Zo', 'Yo']
+      : si
+        ? ['kb', 'mb', 'gb', 'gb', 'pb', 'eb', 'zb', 'yb']
+        : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+
     let u = -1;
     do {
       bytes /= thresh;
       ++u;
     } while (Math.abs(bytes) >= thresh && u < units.length - 1);
-    return `${bytes.toFixed(1)}${units[u]}`;
+
+    // Add a space before unit for FR readability
+    return isFr ? `${bytes.toFixed(1)} ${units[u]}` : `${bytes.toFixed(1)}${units[u]}`;
   }
 
   static hexToBase64(str: string) {
