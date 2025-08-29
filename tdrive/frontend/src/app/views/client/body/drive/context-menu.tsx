@@ -293,9 +293,21 @@ export const useOnBuildContextMenu = (
           }
         }
 
-        if (selectedCount && (selectedCount >= 2 || !item)) {
+        if (selectedCount >= 2) {
           // Add selected items related menus
           const newMenuActions: any[] = [
+            {
+              testClassId: 'shared-drive-access-manage-modal',
+              type: 'menu',
+              icon: 'cloud',
+              text: 'Shared Drive (gestion...)',
+              hide: inTrash || parent.access !== 'manage',
+              onClick: () => {
+                if (checked.length) {
+                  setSharedDriveModalState({ open: true, id: checked[0].id, ids: checked.map(c => c.id) });
+                }
+              },
+            },
             {
               testClassId: 'move-multiple',
               type: 'menu',
@@ -395,6 +407,15 @@ export const useOnBuildContextMenu = (
                 },
               ]
             : [
+                {
+                  testClassId: 'create-folder',
+                  type: 'menu',
+                  text: Languages.t('components.create_modal.create_folder'),
+                  hide: inTrash || parent.access === 'read',
+                  onClick: () =>
+                    parent?.item?.id &&
+                    setCreationModalState({ open: true, parent_id: parent?.item?.id, type: 'folder' }),
+                },
                 {
                   testClassId: 'add-documents',
                   type: 'menu',

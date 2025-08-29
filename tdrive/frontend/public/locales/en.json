@@ -368,7 +368,6 @@
     "scenes.login.create_account.username": "Username",
     "scenes.login.create_account.username_already_exist": "This username is already in use",
     "scenes.login.footer.branding": "You are on a {{$1}} ({{$2}}) private rDrive server. ",
-    "scenes.login.footer.go_to_tdrive": "Go to twake.app",
     "scenes.login.home.create_account": "Create an account",
     "scenes.login.home.email": "E-mail",
     "scenes.login.home.login_btn": "Log in",
@@ -386,5 +385,9 @@
     "services.user.notification_parameters_update_alert": "The notification settings have been updated.",
     "services.user.update_password_alert": "Your password has been updated.",
     "drive.dropbox.connect_button": "Connect your Dropbox",
-    "drive.dropbox.redirecting": "Redirecting..."
+    "drive.dropbox.redirecting": "Redirecting...",
+    "drive.dropbox.my_drive": "My Dropbox",
+    "drive.googledrive.connect_button": "Connect your Google Drive",
+    "drive.googledrive.redirecting": "Redirecting to Google Drive...",
+    "drive.googledrive.my_drive": "My Google Drive"
 }

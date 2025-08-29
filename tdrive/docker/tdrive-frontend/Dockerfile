@@ -8,7 +8,8 @@ WORKDIR /tdrive-react
 
 # Meilleur cache : d'abord les manifestes
 COPY frontend/package*.json ./
-RUN npm ci --legacy-peer-deps
+# Use npm install instead of npm ci because dependencies were updated without regenerating lockfile
+RUN npm install --legacy-peer-deps
 
 # Puis le reste du code
 COPY frontend/ .
@@ -17,6 +18,9 @@ ENV GENERATE_SOURCEMAP=false \
     DISABLE_ESLINT_PLUGIN=true \
     TSC_COMPILE_ON_ERROR=true \
     SKIP_PREFLIGHT_CHECK=true
+
+# Ensure a favicon.ico exists in the CRA public folder (fallback to PNG)
+RUN [ -f public/favicon.ico ] || cp public/favicon.png public/favicon.ico || true
 
 # Build args fournis par docker-compose pour injecter les URLs au build React
 ARG REACT_APP_FRONTEND_URL
