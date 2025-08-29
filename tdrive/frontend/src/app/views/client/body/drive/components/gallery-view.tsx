@@ -1,7 +1,7 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { CheckCircleIcon } from '@heroicons/react/solid';
 import { DotsHorizontalIcon, CloudIcon } from '@heroicons/react/outline';
-import { VideoCameraIcon } from '@heroicons/react/solid';
+import { VideoCameraIcon, PhotographIcon } from '@heroicons/react/solid';
 import { DocumentIcon } from '../documents/document-icon';
 import { PublicIcon } from './public-icon';
 import { hasAnyPublicLinkAccess, hasSharedDriveAccess } from '@features/files/utils/access-info-helpers';
@@ -10,6 +10,95 @@ import type { DriveItem } from 'app/features/drive/types';
 import Menu from '@components/menus/menu';
 import { Button } from '@atoms/button/button';
 import fileUploadApiClient from '@features/files/api/file-upload-api-client';
+
+const GalleryThumbnail: React.FC<{ item: DriveItem }> = ({ item }) => {
+  const isDir = (item as any).is_directory;
+  const meta = (item as any)?.last_version_cache?.file_metadata as any;
+  const name = (item as any)?.name || '';
+  const isImage = !!meta?.mime && meta.mime.startsWith('image/');
+  const isVideo = !!meta?.mime && meta.mime.startsWith('video/');
+  const likelyImageByExt = /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/i.test(name);
+  const likelyVideoByExt = /\.(mp4|mov|webm|avi|mkv|m4v)$/i.test(name);
+
+  const thumb = meta?.thumbnails?.[0];
+  let initialThumbUrl: string | undefined = thumb?.full_url || thumb?.url;
+  if (!initialThumbUrl && meta?.source === 'internal' && typeof meta?.external_id === 'string' && typeof thumb?.index !== 'undefined') {
+    const base = fileUploadApiClient.getRoute({ companyId: (item as any).company_id, fileId: meta.external_id, fullApiRouteUrl: true });
+    initialThumbUrl = `${base}/thumbnails/${thumb.index}`;
+  }
+  if (
+    !initialThumbUrl &&
+    !isDir &&
+    (isImage || likelyImageByExt) &&
+    meta?.source === 'internal' &&
+    typeof meta?.external_id === 'string'
+  ) {
+    initialThumbUrl = fileUploadApiClient.getDownloadRoute({ companyId: (item as any).company_id, fileId: meta.external_id });
+  }
+
+  const [errored, setErrored] = useState(false);
+  const thumbUrl = !errored ? initialThumbUrl : undefined;
+  const looksLikeImage = !isDir && (isImage || likelyImageByExt);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // If we don't have any preview URL for an image-like file (e.g., Dropbox/Google Drive without thumbnails),
+  // show a short skeleton, then display a violet photo icon.
+  React.useEffect(() => {
+    // Reset loading state when item changes
+    setIsLoading(true);
+  }, [(item as any)?.id]);
+
+  return (
+    <div className="aspect-square w-full overflow-hidden rounded-t-lg bg-zinc-50 flex items-center justify-center">
+      {(() => {
+        if (!isDir && (isVideo || likelyVideoByExt)) {
+          return (
+            <div className="h-full w-full bg-yellow-50 flex items-center justify-center">
+              <VideoCameraIcon className="h-16 w-16 text-yellow-600" />
+            </div>
+          );
+        }
+
+        if (looksLikeImage && thumbUrl) {
+          return (
+            <div className="relative h-full w-full">
+              {isLoading && (
+                <div className="absolute inset-0 bg-zinc-100 animate-pulse flex items-center justify-center">
+                  <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+              <img
+                src={thumbUrl}
+                alt={item.name}
+                className={`h-full w-full object-cover ${isLoading ? 'opacity-0' : 'opacity-100 transition-opacity duration-200'}`}
+                loading="lazy"
+                onLoad={() => setIsLoading(false)}
+                onError={() => {
+                  setErrored(true);
+                  setIsLoading(false);
+                }}
+              />
+            </div>
+          );
+        }
+
+        if (looksLikeImage && !thumbUrl) {
+          return (
+            <div className="h-full w-full bg-blue-50 flex items-center justify-center">
+              {isLoading ? (
+                <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <PhotographIcon className="h-16 w-16 text-blue-600" />
+              )}
+            </div>
+          );
+        }
+
+        return <DocumentIcon item={item as any} className="h-16 w-16" />;
+      })()}
+    </div>
+  );
+};
 
 export interface GalleryViewProps {
   items: DriveItem[];
@@ -68,48 +157,7 @@ export const GalleryView: React.FC<GalleryViewProps> = memo(
                 )}
 
                 {/* Preview area */}
-                <div
-                  className="aspect-square w-full overflow-hidden rounded-t-lg bg-zinc-50 flex items-center justify-center"
-                >
-                  {(() => {
-                    const meta = (item as any)?.last_version_cache?.file_metadata as any;
-                    const name = (item as any)?.name || '';
-                    const isImage = !!meta?.mime && meta.mime.startsWith('image/');
-                    const isVideo = !!meta?.mime && meta.mime.startsWith('video/');
-                    const likelyImageByExt = /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/i.test(name);
-                    const likelyVideoByExt = /\.(mp4|mov|webm|avi|mkv|m4v)$/i.test(name);
-                    const thumb = meta?.thumbnails?.[0];
-                    let thumbUrl: string | undefined = thumb?.full_url || thumb?.url;
-                    // If internal source and no direct URL, construct the API route using external_id + index
-                    if (!thumbUrl && meta?.source === 'internal' && typeof meta?.external_id === 'string' && typeof thumb?.index !== 'undefined') {
-                      const base = fileUploadApiClient.getRoute({ companyId: (item as any).company_id, fileId: meta.external_id, fullApiRouteUrl: true });
-                      thumbUrl = `${base}/thumbnails/${thumb.index}`;
-                    }
-                    // Final fallback: if it's an image (by mime OR extension) and no thumbnail URL, use original download URL
-                    if (!thumbUrl && !isDir && (isImage || likelyImageByExt) && typeof meta?.external_id === 'string') {
-                      thumbUrl = fileUploadApiClient.getDownloadRoute({ companyId: (item as any).company_id, fileId: meta.external_id });
-                    }
-
-                    if (!isDir && (isImage || likelyImageByExt) && thumbUrl) {
-                      return (
-                        <img
-                          src={thumbUrl}
-                          alt={item.name}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      );
-                    }
-                    if (!isDir && (isVideo || likelyVideoByExt)) {
-                      return (
-                        <div className="h-full w-full bg-yellow-50 flex items-center justify-center">
-                          <VideoCameraIcon className="h-16 w-16 text-yellow-600" />
-                        </div>
-                      );
-                    }
-                    return <DocumentIcon item={item as any} className="h-16 w-16" />;
-                  })()}
-                </div>
+                <GalleryThumbnail item={item as any} />
 
                 {/* Meta */}
                 <div className="px-3 py-2">
