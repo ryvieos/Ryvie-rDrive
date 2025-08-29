@@ -7,8 +7,9 @@ export default (props: { download: string; name: string; id: string }) => {
   const [previewUrl, setPreviewUrl] = useState('');
 
   useEffect(() => {
-    if (!previewUrl) setPreviewUrl(getPreviewUrl(props.id) || '');
-  }, [previewUrl, setPreviewUrl]);
+    // Recompute preview URL whenever the file id or editors config changes
+    setPreviewUrl(getPreviewUrl(props.id) || '');
+  }, [props.id, getPreviewUrl]);
 
   if (!(props.id && previewUrl)) {
     return (
