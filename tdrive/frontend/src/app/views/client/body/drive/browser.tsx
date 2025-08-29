@@ -1,4 +1,4 @@
-import { ChevronDownIcon, RefreshIcon } from '@heroicons/react/outline';
+import { ChevronDownIcon, RefreshIcon, ViewGridIcon, ViewListIcon } from '@heroicons/react/outline';
 import { Button } from '@atoms/button/button';
 import { Base, BaseSmall, Subtitle, Title } from '@atoms/text';
 import Menu from '@components/menus/menu';
@@ -23,6 +23,7 @@ import {
   useOnBuildSortContextMenu,
 } from './context-menu';
 import { DocumentRow, DocumentRowOverlay } from './documents/document-row';
+import { useDrivePreview } from '@features/drive/hooks/use-drive-preview';
 import { FolderRow } from './documents/folder-row';
 import { FolderRowSkeleton } from './documents/folder-row-skeleton';
 import HeaderPath from './header-path';
@@ -54,6 +55,7 @@ import { ConfirmModal } from './modals/confirm-move';
 import { useHistory } from 'react-router-dom';
 import { SortIcon } from 'app/atoms/icons-agnostic';
 import { useUploadExp } from 'app/features/files/hooks/use-exp-upload';
+import GalleryView from './components/gallery-view';
 
 export const DriveCurrentFolderAtom = atomFamily<
   string,
@@ -415,6 +417,21 @@ export default memo(
       }
     }, [isGoogleDriveView, parentId, importDropboxFolder, user?.id, importingGoogleDrive]);
 
+    // View mode: list (default) or gallery, persisted in localStorage
+    const [viewMode, setViewMode] = useState<'list' | 'gallery'>(() => {
+      try {
+        const saved = localStorage.getItem('drive_view_mode');
+        return (saved === 'gallery' || saved === 'list') ? (saved as 'list' | 'gallery') : 'list';
+      } catch {
+        return 'list';
+      }
+    });
+    useEffect(() => {
+      try { localStorage.setItem('drive_view_mode', viewMode); } catch {}
+    }, [viewMode]);
+
+    const { open: openPreview } = useDrivePreview();
+
     return (
       <>
         {viewId == 'shared-with-me' ? (
@@ -587,6 +604,26 @@ export default memo(
                     </Button>
                   </Menu>
                 )}
+                {buttonsVisible && (
+                  <Button
+                    theme="outline"
+                    className="ml-2 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-500 px-2 md:px-3"
+                    onClick={() => setViewMode(v => (v === 'list' ? 'gallery' : 'list'))}
+                    testClassId="button-toggle-view"
+                  >
+                    {viewMode === 'list' ? (
+                      <>
+                        <ViewGridIcon className="h-4 w-4 mr-2 -ml-1" />
+                        <span>Galerie</span>
+                      </>
+                    ) : (
+                      <>
+                        <ViewListIcon className="h-4 w-4 mr-2 -ml-1" />
+                        <span>Liste</span>
+                      </>
+                    )}
+                  </Button>
+                )}
                 
                 {/* Bouton de synchronisation Dropbox */}
                 {isDropboxView && buttonsVisible && (
@@ -676,34 +713,61 @@ export default memo(
                       )}
                     </div>
                   )}
-                  {visibleItems.map((child, index) =>
-                    child.is_directory ? (
-                      <Droppable id={index} key={index}>
-                        <FolderRow
-                          key={index}
-                          className={
-                            (index === 0 ? 'rounded-t-md ' : '-mt-px ') +
-                            (index === visibleItems.length - 1 ? 'rounded-b-md ' : '') +
-                            'border-0 md:border'
-                          }
-                          item={child}
-                          onClick={() => {
-                            const route = RouterServices.generateRouteFromState({
-                              dirId: child.id,
-                            });
-                            history.push(route);
-                            if (inPublicSharing) return setParentId(child.id);
-                          }}
-                          checked={checked[child.id] || false}
-                          onCheck={v =>
-                            setChecked(_.pickBy({ ...checked, [child.id]: v }, _.identity))
-                          }
-                          onBuildContextMenu={() => onBuildContextMenu(details, child)}
-                        />
-                      </Droppable>
-                    ) : (
-                      draggableMarkup(index, child)
-                    ),
+                  {viewMode === 'gallery' ? (
+                    <GalleryView
+                      items={visibleItems as any}
+                      checked={checked}
+                      onCheck={(id, v) => setChecked(_.pickBy({ ...checked, [id]: v }, _.identity))}
+                      buildContextMenu={(it: any) => onBuildContextMenu(details, it)}
+                      onOpenFolder={(id: string) => {
+                        const route = RouterServices.generateRouteFromState({ dirId: id });
+                        history.push(route);
+                        if (inPublicSharing) return setParentId(id);
+                      }}
+                      onOpenFile={(id: string) => {
+                        const it = children.find(c => c.id === id) || items.find(c => c.id === id);
+                        if (it && !it.is_directory) {
+                          openPreview(it);
+                          history.push(RouterServices.generateRouteFromState({ companyId, itemId: id }));
+                        }
+                      }}
+                      onContextMenu={(it: any, evt: React.MouseEvent) => {
+                        evt.preventDefault();
+                        onBuildContextMenu(details, it);
+                      }}
+                    />
+                  ) : (
+                    <>
+                      {visibleItems.map((child, index) =>
+                        child.is_directory ? (
+                          <Droppable id={index} key={index}>
+                            <FolderRow
+                              key={index}
+                              className={
+                                (index === 0 ? 'rounded-t-md ' : '-mt-px ') +
+                                (index === visibleItems.length - 1 ? 'rounded-b-md ' : '') +
+                                'border-0 md:border'
+                              }
+                              item={child}
+                              onClick={() => {
+                                const route = RouterServices.generateRouteFromState({
+                                  dirId: child.id,
+                                });
+                                history.push(route);
+                                if (inPublicSharing) return setParentId(child.id);
+                              }}
+                              checked={checked[child.id] || false}
+                              onCheck={v =>
+                                setChecked(_.pickBy({ ...checked, [child.id]: v }, _.identity))
+                              }
+                              onBuildContextMenu={() => onBuildContextMenu(details, child)}
+                            />
+                          </Droppable>
+                        ) : (
+                          draggableMarkup(index, child)
+                        ),
+                      )}
+                    </>
                   )}
                   {shouldVirtualize && visibleRange.end < itemsCount && (
                     <div className="flex justify-center py-4">
