@@ -187,22 +187,45 @@ class AuthService {
     });
   }
 
-  logout(reload = true): Promise<void> {
+  async logout(reload = true): Promise<void> {
     this.clear();
 
+    // Ne pas recharger si on est déjà sur la page de déconnexion
     const shouldReload = reload && window.location.pathname !== '/logout';
 
-    return new Promise(async resolve => {
-      try {
-        await UserAPIClient.logout();
-        this.getProvider().signOut && (await this.getProvider().signOut!({ reload: shouldReload }));
-        this.logger.debug('SignOut complete');
-        resolve();
-      } catch (err) {
-        this.logger.error('Error while signin out', err);
-        resolve();
+    try {
+      await UserAPIClient.logout();
+      
+      // Si le fournisseur a une méthode signOut, l'appeler
+      const provider = this.getProvider();
+      if (provider && typeof provider.signOut === 'function') {
+        try {
+          await provider.signOut({ reload: shouldReload });
+        } catch (err) {
+          this.logger.error('Error in provider signOut', err);
+        }
       }
-    });
+      
+      this.logger.debug('SignOut complete');
+      
+      // Rediriger vers la page de login après déconnexion
+      if (shouldReload) {
+        // Vider le localStorage pour éviter toute boucle
+        localStorage.removeItem('oidc.user:https://auth.ryvie.fr:443/realms/ryvie:account');
+        localStorage.removeItem('oidc.user:https://auth.ryvie.fr/realms/ryvie:account');
+        
+        // Rediriger vers la page de login avec un paramètre pour éviter la boucle
+        const loginUrl = new URL('/login', window.location.origin);
+        loginUrl.searchParams.append('fromLogout', 'true');
+        window.location.href = loginUrl.toString();
+      }
+    } catch (err) {
+      this.logger.error('Error during logout', err);
+      // En cas d'erreur, rediriger quand même vers la page de login
+      if (shouldReload) {
+        window.location.href = '/login?fromLogout=true';
+      }
+    }
   }
 
   updateUser(callback?: (user?: UserType) => void): void {
