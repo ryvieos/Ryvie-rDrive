@@ -31,9 +31,8 @@ export const useCloudFiles = () => {
           
           logger.info(`📧 Récupération des fichiers ${provider} pour:`, user.email);
           
-          // Construire l'URL du backend dynamiquement avec le provider
-          const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
-          const response = await fetch(`${backendUrl}/api/v1/files/rclone/list?path=${encodeURIComponent(path)}&userEmail=${encodeURIComponent(user.email)}&provider=${provider}`, {
+          // Utiliser un chemin relatif pour passer par Nginx (/api)
+          const response = await fetch(`/api/v1/files/rclone/list?path=${encodeURIComponent(path)}&userEmail=${encodeURIComponent(user.email)}&provider=${provider}`, {
             method: 'GET',
             headers: {
               'Accept': 'application/json',
@@ -53,19 +52,32 @@ export const useCloudFiles = () => {
           }
           
           // Transformer les fichiers rclone en format DriveItem (unifié pour les deux providers)
-          const driveItems: DriveItem[] = data.map((file: any) => {
-            // Construire le chemin complet pour l'ID
-            const fullPath = path ? `${path}/${file.path}` : file.path;
+          const driveItemsRaw: DriveItem[] = data.map((file: any) => {
+            const filePath = file.path ?? file.Path ?? '';
+            const fileName = file.name ?? file.Name ?? (filePath?.split('/')?.pop() ?? '');
+            // Construire le chemin complet pour l'affichage/navigation
+            const fullPath = path ? `${path}/${filePath}` : filePath;
+            // ID stable basé sur l'ID renvoyé par le provider/rclone, sinon fallback sur le path
+            const rawId = file.id ?? file.ID ?? filePath ?? fullPath;
+            // Normaliser la taille: éviter les tailles négatives (-1) qui peuvent casser des renders/formatters
+            const normalizedSize = Math.max(0, Number(file.size ?? file.Size ?? 0));
+            const isDir = Boolean(file.is_directory ?? file.IsDir ?? false);
+            const mime = file.mime_type ?? (isDir ? 'inode/directory' : 'application/octet-stream');
+            // Utiliser un ID basé sur le chemin pour supporter la navigation par répertoires
+            const itemId = `${provider}_${fullPath || (isDir ? fileName : fileName)}`;
+            const parentId = path ? `${provider}_${path}` : `${provider}_root`;
+            const extension = (fileName && fileName.includes('.')) ? (fileName.split('.').pop() || '') : '';
+
             return {
-              id: `${provider}_${fullPath}`,
-              name: file.name,
-              size: file.size || file.Size || 0,
-              is_directory: file.is_directory || false,
-              parent_id: path ? `${provider}_${path}` : `${provider}_root`,
-              company_id: '', // Pas applicable pour les providers cloud
-              workspace_id: '', // Pas applicable pour les providers cloud
+              id: itemId,
+              name: fileName,
+              size: normalizedSize,
+              is_directory: isDir,
+              parent_id: parentId,
+              company_id: '',
+              workspace_id: '',
               is_in_trash: false,
-              extension: file.name.includes('.') ? file.name.split('.').pop() || '' : '',
+              extension,
               description: '',
               tags: [],
               added: file.modified_at || new Date().toISOString(),
@@ -82,21 +94,32 @@ export const useCloudFiles = () => {
                 entities: [],
               },
               last_version_cache: {
-                id: `${file.id || file.path}_v1`,
+                id: `${itemId}_v1`,
                 provider: provider,
-                drive_item_id: `${provider}_${fullPath}`,
+                drive_item_id: itemId,
                 date_added: Date.now(),
                 creator_id: '',
                 application_id: '',
                 file_metadata: {
                   source: provider,
-                  external_id: file.id || file.path,
-                  name: file.name,
-                  mime: file.mime_type || (file.is_directory ? 'inode/directory' : 'application/octet-stream'),
-                  size: file.size || file.Size || 0,
+                  external_id: rawId,
+                  name: fileName,
+                  mime,
+                  size: normalizedSize,
                 },
               },
             };
+          });
+
+          // Assurer l'unicité des IDs pour éviter tout conflit dans le store/render
+          const seen = new Set<string>();
+          const driveItems: DriveItem[] = driveItemsRaw.map((it, idx) => {
+            let id = it.id;
+            if (seen.has(id)) {
+              id = `${id}__${idx}`;
+            }
+            seen.add(id);
+            return { ...it, id, last_version_cache: { ...it.last_version_cache, id: `${id}_v1`, drive_item_id: id } };
           });
           
           // Créer l'item parent pour le provider cloud
@@ -147,10 +170,13 @@ export const useCloudFiles = () => {
           // Mettre à jour le store Recoil
           set(DriveItemAtom(parentId), parentItem);
           set(DriveItemChildrenAtom(parentId), driveItems);
-          
-          // Mettre à jour chaque enfant dans le store
-          for (const child of driveItems) {
-            set(DriveItemAtom(child.id), { item: child });
+
+          // Pour éviter des freezes sur d'énormes listes, limiter les écritures par enfant
+          const MAX_CHILD_ATOMS = 500;
+          if (driveItems.length <= MAX_CHILD_ATOMS) {
+            for (const child of driveItems) {
+              set(DriveItemAtom(child.id), { item: child });
+            }
           }
           
           return parentItem;

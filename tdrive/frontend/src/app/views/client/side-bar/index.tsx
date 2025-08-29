@@ -19,7 +19,6 @@ import { useDriveItem } from '../../../features/drive/hooks/use-drive-item';
 import { DriveCurrentFolderAtom } from '../body/drive/browser';
 import { DriveNavigationState } from '../../../features/drive/state/store';
 import Account from '../common/account';
-import AppGrid from '../common/app-grid';
 import DiskUsage from '../common/disk-usage';
 import Actions from './actions';
 import { useHistory } from 'react-router-dom';
@@ -101,7 +100,8 @@ export default () => {
     const checkRealConnections = async () => {
       if (!user?.email) return;
       
-      const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
+      // Utiliser des chemins relatifs /api pour passer par le reverse proxy Nginx
+      const backendUrl = '';
       const userEmail = encodeURIComponent(user.email);
       
       // Vérifier Dropbox
@@ -185,9 +185,6 @@ export default () => {
             <div className="md:grow order-3 md:order-2">
               <Account />
             </div>
-            <div className="order-2 md:order-3 mr-2 md:mr-0">
-              <AppGrid />
-            </div>
           </div>
 
           <div className="mt-6" />
@@ -226,7 +223,7 @@ export default () => {
             }
             testClassId="sidebar-menu-shared-drive"
           >
-            <CloudIcon className="w-5 h-5 mr-4" /> Shared Drive
+            <CloudIcon className="w-5 h-5 mr-4" /> {Languages.t('components.side_menu.home')}
           </Button>
         )}
         {FeatureTogglesService.isActiveFeatureName(FeatureNames.COMPANY_MANAGE_ACCESS) && (
@@ -296,9 +293,9 @@ export default () => {
               try {
                 console.log('🔗 Connexion Dropbox pour l\'utilisateur:', user);
                 
-                const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
                 const userEmail = encodeURIComponent(user.email);
-                const response = await fetch(`${backendUrl}/v1/drivers/Dropbox?userEmail=${userEmail}`);
+                // Appeler l'endpoint via le proxy: /api/v1/drivers/Dropbox
+                const response = await fetch(`/api/v1/drivers/Dropbox?userEmail=${userEmail}`);
                 
                 if (!response.ok) {
                   throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -332,10 +329,10 @@ export default () => {
             className="w-5 h-5 mr-4"
           />
           {connectingDropbox 
-            ? 'Redirecting to Dropbox...' 
+            ? Languages.t('drive.dropbox.redirecting')
             : dropboxConnected 
-              ? 'My Dropbox' 
-              : 'Connect your Dropbox'}
+              ? Languages.t('drive.dropbox.my_drive')
+              : Languages.t('drive.dropbox.connect_button')}
         </Button>
 
         {/* Bouton Google Drive dynamique */}
@@ -356,9 +353,9 @@ export default () => {
               try {
                 console.log('🔗 Connexion Google Drive pour l\'utilisateur:', user);
                 
-                const backendUrl = window.location.protocol + '//' + window.location.hostname + ':4000';
                 const userEmail = encodeURIComponent(user.email);
-                const response = await fetch(`${backendUrl}/v1/drivers/GoogleDrive?userEmail=${userEmail}`);
+                // Appeler l'endpoint via le proxy: /api/v1/drivers/GoogleDrive
+                const response = await fetch(`/api/v1/drivers/GoogleDrive?userEmail=${userEmail}`);
                 
                 if (!response.ok) {
                   throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -392,10 +389,10 @@ export default () => {
             className="w-5 h-5 mr-4"
           />
           {connectingGoogleDrive 
-            ? 'Redirecting to Google Drive...' 
+            ? Languages.t('drive.googledrive.redirecting')
             : googleDriveConnected 
-              ? 'My Google Drive' 
-              : 'Connect your Google Drive'}
+              ? Languages.t('drive.googledrive.my_drive')
+              : Languages.t('drive.googledrive.connect_button')}
         </Button>
 
         {false && (

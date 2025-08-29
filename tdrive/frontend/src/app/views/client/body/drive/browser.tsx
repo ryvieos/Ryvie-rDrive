@@ -1,4 +1,4 @@
-import { ChevronDownIcon, RefreshIcon } from '@heroicons/react/outline';
+import { ChevronDownIcon, RefreshIcon, ViewGridIcon, ViewListIcon, TrashIcon, DotsVerticalIcon } from '@heroicons/react/outline';
 import { Button } from '@atoms/button/button';
 import { Base, BaseSmall, Subtitle, Title } from '@atoms/text';
 import Menu from '@components/menus/menu';
@@ -23,11 +23,14 @@ import {
   useOnBuildSortContextMenu,
 } from './context-menu';
 import { DocumentRow, DocumentRowOverlay } from './documents/document-row';
+import { useDrivePreview } from '@features/drive/hooks/use-drive-preview';
 import { FolderRow } from './documents/folder-row';
 import { FolderRowSkeleton } from './documents/folder-row-skeleton';
 import HeaderPath from './header-path';
 import { ConfirmDeleteModal } from './modals/confirm-delete';
 import { ConfirmTrashModal } from './modals/confirm-trash';
+import { ConfirmDeleteModalAtom } from './modals/confirm-delete';
+import { ConfirmTrashModalAtom } from './modals/confirm-trash';
 import { CreateModalAtom } from './modals/create';
 import { UploadModelAtom } from './modals/upload';
 import { PropertiesModal } from './modals/properties';
@@ -54,6 +57,7 @@ import { ConfirmModal } from './modals/confirm-move';
 import { useHistory } from 'react-router-dom';
 import { SortIcon } from 'app/atoms/icons-agnostic';
 import { useUploadExp } from 'app/features/files/hooks/use-exp-upload';
+import GalleryView from './components/gallery-view';
 
 export const DriveCurrentFolderAtom = atomFamily<
   string,
@@ -126,9 +130,19 @@ export default memo(
     const memoizedItems = useMemo(() => children || [], [children]);
     const itemsCount = memoizedItems.length;
     
-    // Virtualisation légère pour les grandes listes (> 50 items)
-    const shouldVirtualize = itemsCount > 50;
-    const [visibleRange, setVisibleRange] = useState({ start: 0, end: shouldVirtualize ? 50 : itemsCount });
+    // Virtualisation légère pour les grandes listes
+    const VIRT_PAGE_SIZE = 200;
+    const VIRT_THRESHOLD = 100; // déclenchement de chargement quand on s'approche du bas
+    const shouldVirtualize = itemsCount > VIRT_PAGE_SIZE;
+    const [visibleRange, setVisibleRange] = useState({
+      start: 0,
+      end: shouldVirtualize ? Math.min(VIRT_PAGE_SIZE, itemsCount) : itemsCount,
+    });
+    
+    // Réinitialiser la fenêtre visible lors d'un changement d'items
+    useEffect(() => {
+      setVisibleRange({ start: 0, end: shouldVirtualize ? Math.min(VIRT_PAGE_SIZE, itemsCount) : itemsCount });
+    }, [itemsCount, shouldVirtualize]);
     
     const visibleItems = useMemo(() => {
       return shouldVirtualize 
@@ -174,6 +188,7 @@ export default memo(
     const documents = items.filter(i => !i.is_directory);
 
     const selectedCount = Object.values(checked).filter(v => v).length;
+    const selectedItems = useMemo(() => (children || []).filter(c => checked[c.id]), [children, checked]);
 
     const onBuildContextMenu = useOnBuildContextMenu(children, initialParentId, inPublicSharing);
     const onBuildSortContextMenu = useOnBuildSortContextMenu();
@@ -198,6 +213,8 @@ export default memo(
     const buildPeopleContextMen = useOnBuildPeopleContextMenu();
     const buildDateContextMenu = useOnBuildDateContextMenu();
     const setConfirmModalState = useSetRecoilState(ConfirmModalAtom);
+    const setConfirmDeleteModalState = useSetRecoilState(ConfirmDeleteModalAtom);
+    const setConfirmTrashModalState = useSetRecoilState(ConfirmTrashModalAtom);
     const [activeIndex, setActiveIndex] = useState(null);
     const [activeChild, setActiveChild] = useState(null);
     const { update } = useDriveActions();
@@ -212,6 +229,77 @@ export default memo(
       }),
     );
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    // Marquee selection state
+    const [isSelecting, setIsSelecting] = useState(false);
+    const [selectOrigin, setSelectOrigin] = useState<{ x: number; y: number } | null>(null);
+    const [selectRect, setSelectRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+
+    const updateSelectionFromRect = useCallback((rect: DOMRect) => {
+      const container = scrollViewer.current;
+      if (!container) return;
+      const elements = Array.from(container.querySelectorAll('[id^="DR-"]')) as HTMLElement[];
+      const nextChecked: Record<string, boolean> = {};
+      elements.forEach(el => {
+        const elRect = el.getBoundingClientRect();
+        const intersect = !(rect.right < elRect.left || rect.left > elRect.right || rect.bottom < elRect.top || rect.top > elRect.bottom);
+        if (intersect) {
+          const id = el.id.replace('DR-', '');
+          nextChecked[id] = true;
+        }
+      });
+      setChecked(nextChecked);
+    }, [setChecked]);
+
+    const onMouseDownScroll = useCallback((e: React.MouseEvent) => {
+      if (e.button !== 0) return; // only left click
+      const container = scrollViewer.current;
+      if (!container) return;
+      // start selection when dragging on the background, not on items
+      const target = e.target as HTMLElement;
+      const inItem = target.closest('[id^="DR-"]');
+      if (inItem) return;
+      // Background click: clear current selection immediately
+      setChecked({});
+      const startX = e.clientX;
+      const startY = e.clientY;
+      setIsSelecting(true);
+      setSelectOrigin({ x: startX, y: startY });
+      setSelectRect({ left: startX, top: startY, width: 0, height: 0 });
+      e.preventDefault();
+    }, []);
+
+    const onMouseMoveWindow = useCallback((e: MouseEvent) => {
+      if (!isSelecting || !selectOrigin) return;
+      const x1 = selectOrigin.x;
+      const y1 = selectOrigin.y;
+      const x2 = e.clientX;
+      const y2 = e.clientY;
+      const left = Math.min(x1, x2);
+      const top = Math.min(y1, y2);
+      const width = Math.abs(x2 - x1);
+      const height = Math.abs(y2 - y1);
+      setSelectRect({ left, top, width, height });
+      const rect = new DOMRect(left, top, width, height);
+      updateSelectionFromRect(rect);
+    }, [isSelecting, selectOrigin, updateSelectionFromRect]);
+
+    const onMouseUpWindow = useCallback(() => {
+      if (!isSelecting) return;
+      setIsSelecting(false);
+      setSelectOrigin(null);
+      // keep the final rect briefly (optional), then clear it
+      setTimeout(() => setSelectRect(null), 0);
+    }, [isSelecting]);
+
+    useEffect(() => {
+      window.addEventListener('mousemove', onMouseMoveWindow);
+      window.addEventListener('mouseup', onMouseUpWindow);
+      return () => {
+        window.removeEventListener('mousemove', onMouseMoveWindow);
+        window.removeEventListener('mouseup', onMouseUpWindow);
+      };
+    }, [onMouseMoveWindow, onMouseUpWindow]);
 
     function handleDragStart(event: any) {
       setActiveIndex(event.active.id);
@@ -267,9 +355,17 @@ export default memo(
     const scrollViewer = useRef<HTMLDivElement>(null);
 
     const handleScroll = async () => {
-      const scrollTop = scrollViewer.current?.scrollTop || 0;
-      const scrollHeight = scrollViewer.current?.scrollHeight || 0;
-      const clientHeight = scrollViewer.current?.clientHeight || 0;
+      const el = scrollViewer.current;
+      if (!el) return;
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const nearBottom = scrollTop + clientHeight + VIRT_THRESHOLD >= scrollHeight;
+
+      // Étendre la fenêtre visible côté client pour grandes listes
+      if (shouldVirtualize && nearBottom && visibleRange.end < itemsCount) {
+        setVisibleRange((v: { start: number; end: number }) => ({ start: 0, end: Math.min(v.end + VIRT_PAGE_SIZE, itemsCount) }));
+      }
+
+      // Continuer à charger côté store quand nécessaire
       if (scrollTop > 0 && scrollTop + clientHeight >= scrollHeight) {
         await loadNextPage(parentId);
       }
@@ -396,6 +492,21 @@ export default memo(
         setImportingGoogleDrive(false);
       }
     }, [isGoogleDriveView, parentId, importDropboxFolder, user?.id, importingGoogleDrive]);
+
+    // View mode: list (default) or gallery, persisted in localStorage
+    const [viewMode, setViewMode] = useState<'list' | 'gallery'>(() => {
+      try {
+        const saved = localStorage.getItem('drive_view_mode');
+        return (saved === 'gallery' || saved === 'list') ? (saved as 'list' | 'gallery') : 'list';
+      } catch {
+        return 'list';
+      }
+    });
+    useEffect(() => {
+      try { localStorage.setItem('drive_view_mode', viewMode); } catch {}
+    }, [viewMode]);
+
+    const { open: openPreview } = useDrivePreview();
 
     return (
       <>
@@ -569,6 +680,58 @@ export default memo(
                     </Button>
                   </Menu>
                 )}
+                {buttonsVisible && (
+                  <Button
+                    theme="outline"
+                    className="ml-2 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-500 px-2 md:px-3"
+                    onClick={() => setViewMode(v => (v === 'list' ? 'gallery' : 'list'))}
+                    testClassId="button-toggle-view"
+                  >
+                    {viewMode === 'list' ? (
+                      <>
+                        <ViewGridIcon className="h-4 w-4 mr-2 -ml-1" />
+                        <span>Galerie</span>
+                      </>
+                    ) : (
+                      <>
+                        <ViewListIcon className="h-4 w-4 mr-2 -ml-1" />
+                        <span>Liste</span>
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                {/* Bulk actions when selection exists */}
+                {selectedCount > 0 && buttonsVisible && (
+                  <>
+                    <Button
+                      theme={'secondary'}
+                      className="ml-2 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-red-600 px-2 md:px-3"
+                      disabled={access !== 'manage'}
+                      onClick={() => {
+                        if (inTrash) {
+                          setConfirmDeleteModalState({ open: true, items: selectedItems as any });
+                        } else {
+                          setConfirmTrashModalState({ open: true, items: selectedItems as any });
+                        }
+                      }}
+                      testClassId="button-bulk-delete"
+                    >
+                      <TrashIcon className="h-4 w-4 mr-2 -ml-1" />
+                      <span>{inTrash ? 'Supprimer' : 'Corbeille'}</span>
+                    </Button>
+
+                    <Menu menu={() => onBuildContextMenu(details, selectedCount === 1 ? selectedItems[0] : undefined)} testClassId="browser-menu-bulk-actions">
+                      <Button
+                        theme="secondary"
+                        className="ml-2 flex flex-row items-center bg-transparent md:bg-blue-500 md:bg-opacity-25 !text-gray-500 md:!text-blue-500 px-2 md:px-3"
+                        testClassId="button-bulk-actions"
+                      >
+                        <DotsVerticalIcon className="h-5 w-5" />
+                      </Button>
+                    </Menu>
+                  </>
+                )}
                 
                 {/* Bouton de synchronisation Dropbox */}
                 {isDropboxView && buttonsVisible && (
@@ -606,24 +769,6 @@ export default memo(
                   </Button>
                 )}
                 
-                {/* Bouton d'import Dropbox dans My Drive */}
-                {!isDropboxView && viewId === 'user_' + user?.id && buttonsVisible && (
-                  <Button
-                    theme="outline"
-                    className="ml-4 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-500 px-0 md:px-4"
-                    onClick={() => importDropboxFolder('', 'user_' + user?.id)}
-                    disabled={importingDropbox}
-                    testClassId="button-import-dropbox"
-                  >
-                    <RefreshIcon 
-                      className={`h-4 w-4 mr-2 -ml-1 ${importingDropbox ? 'animate-spin' : ''}`} 
-                    />
-                    <span>
-                      {importingDropbox ? 'Import en cours...' : 'Importer depuis Dropbox'}
-                    </span>
-                  </Button>
-                )}
-                
                 {viewId !== 'shared_with_me' && buttonsVisible && (
                   <Menu menu={() => onBuildContextMenu(details)} testClassId="browser-menu-more">
                     {' '}
@@ -645,7 +790,7 @@ export default memo(
               </div>
 
               <DndContext sensors={sensors} onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
-                <div className="grow overflow-auto" ref={scrollViewer}>
+                <div className="grow overflow-auto relative" ref={scrollViewer} onMouseDown={onMouseDownScroll}>
                   {/* Indicateur de navigation instantanée */}
                   {isNavigatingInstantly && (
                     <div className="flex items-center justify-center py-4 text-blue-500">
@@ -676,34 +821,73 @@ export default memo(
                       )}
                     </div>
                   )}
-                  {visibleItems.map((child, index) =>
-                    child.is_directory ? (
-                      <Droppable id={index} key={index}>
-                        <FolderRow
-                          key={index}
-                          className={
-                            (index === 0 ? 'rounded-t-md ' : '-mt-px ') +
-                            (index === visibleItems.length - 1 ? 'rounded-b-md ' : '') +
-                            'border-0 md:border'
-                          }
-                          item={child}
-                          onClick={() => {
-                            const route = RouterServices.generateRouteFromState({
-                              dirId: child.id,
-                            });
-                            history.push(route);
-                            if (inPublicSharing) return setParentId(child.id);
-                          }}
-                          checked={checked[child.id] || false}
-                          onCheck={v =>
-                            setChecked(_.pickBy({ ...checked, [child.id]: v }, _.identity))
-                          }
-                          onBuildContextMenu={() => onBuildContextMenu(details, child)}
-                        />
-                      </Droppable>
-                    ) : (
-                      draggableMarkup(index, child)
-                    ),
+                  {viewMode === 'gallery' ? (
+                    <GalleryView
+                      items={visibleItems as any}
+                      checked={checked}
+                      onCheck={(id, v) => setChecked(_.pickBy({ ...checked, [id]: v }, _.identity))}
+                      buildContextMenu={(it: any) => onBuildContextMenu(details, it)}
+                      onOpenFolder={(id: string) => {
+                        const route = RouterServices.generateRouteFromState({ dirId: id });
+                        history.push(route);
+                        if (inPublicSharing) return setParentId(id);
+                      }}
+                      onOpenFile={(id: string) => {
+                        const it = children.find(c => c.id === id) || items.find(c => c.id === id);
+                        if (it && !it.is_directory) {
+                          openPreview(it);
+                          history.push(RouterServices.generateRouteFromState({ companyId, itemId: id }));
+                        }
+                      }}
+                      onContextMenu={(it: any, evt: React.MouseEvent) => {
+                        evt.preventDefault();
+                        onBuildContextMenu(details, it);
+                      }}
+                    />
+                  ) : (
+                    <>
+                      {visibleItems.map((child, index) =>
+                        child.is_directory ? (
+                          <Droppable id={index} key={index}>
+                            <FolderRow
+                              key={index}
+                              className={
+                                (index === 0 ? 'rounded-t-md ' : '-mt-px ') +
+                                (index === visibleItems.length - 1 ? 'rounded-b-md ' : '') +
+                                'border-0 md:border'
+                              }
+                              item={child}
+                              onClick={() => {
+                                const route = RouterServices.generateRouteFromState({
+                                  dirId: child.id,
+                                });
+                                history.push(route);
+                                if (inPublicSharing) return setParentId(child.id);
+                              }}
+                              checked={checked[child.id] || false}
+                              onCheck={v =>
+                                setChecked(_.pickBy({ ...checked, [child.id]: v }, _.identity))
+                              }
+                              onBuildContextMenu={() => onBuildContextMenu(details, child)}
+                            />
+                          </Droppable>
+                        ) : (
+                          draggableMarkup(index, child)
+                        ),
+                      )}
+                    </>
+                  )}
+                  {shouldVirtualize && visibleRange.end < itemsCount && (
+                    <div className="flex justify-center py-4">
+                      <Button
+                        theme="secondary"
+                        onClick={() =>
+                          setVisibleRange((v: { start: number; end: number }) => ({ start: 0, end: Math.min(v.end + VIRT_PAGE_SIZE, itemsCount) }))
+                        }
+                      >
+                        Charger plus ({visibleRange.end}/{itemsCount})
+                      </Button>
+                    </div>
                   )}
                   <DragOverlay>
                     {activeIndex ? (
@@ -716,6 +900,21 @@ export default memo(
                       ></DocumentRowOverlay>
                     ) : null}
                   </DragOverlay>
+                  {selectRect && (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: selectRect.left,
+                        top: selectRect.top,
+                        width: selectRect.width,
+                        height: selectRect.height,
+                        border: '1px dashed rgba(59,130,246,0.9)',
+                        background: 'rgba(59,130,246,0.12)',
+                        pointerEvents: 'none',
+                        zIndex: 50,
+                      }}
+                    />
+                  )}
                   {loading && <FolderRowSkeleton />}
                 </div>
               </DndContext>

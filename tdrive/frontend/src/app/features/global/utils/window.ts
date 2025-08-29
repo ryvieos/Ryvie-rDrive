@@ -3,7 +3,7 @@ import { capitalize } from 'lodash';
 import Globals from '@features/global/services/globals-tdrive-app-service';
 
 class WindowState {
-  public readonly app_name: string = 'Tdrive';
+  public readonly app_name: string = 'rDrive';
   public prefix = '';
   public suffix = '';
 

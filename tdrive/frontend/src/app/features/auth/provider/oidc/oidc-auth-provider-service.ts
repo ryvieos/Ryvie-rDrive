@@ -144,23 +144,43 @@ export default class OIDCAuthProviderService
   }
 
   async signOut(): Promise<void> {
-    this.logger.info('Signout');
+    this.logger.info('Signout started');
 
     if (!this.userManager) {
+      this.logger.warn('UserManager not initialized');
+      return;
+    }
+
+    // Sauvegarder l'id_token pour l'utiliser après la suppression de l'utilisateur
+    const idToken = this.user?.id_token;
+    
+    try {
+      // Nettoyer l'utilisateur localement
+      await this.userManager.removeUser();
+      this.logger.debug('User removed from local storage');
+    } catch (err) {
+      this.logger.error('Error removing user from local storage', err);
+      // Continuer même en cas d'erreur
+    }
+
+    // Si on est déjà sur la page de déconnexion, ne pas essayer de rediriger
+    if (['/logout', OIDC_SIGNOUT_URL].includes(window.location.pathname)) {
+      this.logger.debug('Already on logout page, skipping redirect');
       return;
     }
 
     try {
-      // in some cases/providers we have to call remove to be sure to logout
-      await this.userManager.removeUser();
+      // Rediriger vers le fournisseur d'identité pour la déconnexion complète
+      this.logger.debug('Initiating signout redirect');
+      await this.userManager.signoutRedirect({
+        id_token_hint: idToken,
+        post_logout_redirect_uri: getAsFrontUrl('/login?fromLogout=true')
+      });
     } catch (err) {
-      this.logger.error('Can not delete user in signout', err);
-    }
-
-    try {
-      await this.userManager.signoutRedirect({ id_token_hint: this.user?.id_token });
-    } catch (err) {
-      this.logger.error('Signout redirect error', err);
+      this.logger.error('Error during signout redirect', err);
+      
+      // En cas d'erreur, rediriger vers la page de login
+      window.location.href = getAsFrontUrl('/login?fromLogout=true&error=signout_failed');
     }
   }
 

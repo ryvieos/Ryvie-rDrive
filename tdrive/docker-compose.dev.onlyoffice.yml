@@ -27,7 +27,7 @@ services:
       - POSTGRES_USER=onlyoffice
       - POSTGRES_PASSWORD=onlyoffice
     ports:
-      - 5432:5432
+      - 5433:5432
     volumes:
       - ./onlyoffice_postgres_data:/var/lib/postgresql/data
     networks:

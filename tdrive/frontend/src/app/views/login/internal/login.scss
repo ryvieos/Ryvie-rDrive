@@ -1,4 +1,30 @@
+      /* Branding: center the logo and title nicely */
+      .brand-block {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin-top: 4px;
+        margin-bottom: 28px;
+      }
+      .brand-logo {
+        width: 140px;
+        height: auto;
+        object-fit: contain;
+        margin: 4px 0 12px;
+        filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.02));
+      }
+      .brand-title {
+        font-size: 18px;
+        line-height: 24px;
+        font-weight: 600;
+        color: #374151; /* gray-700 */
+      }
 .loginPage {
+  /* Modern gradient background */
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7ff 0%, #eef3ff 40%, #e8f3ff 100%);
+
   .tdrive_logo {
     color: #fff;
     position: absolute;
@@ -83,17 +109,99 @@
     overflow: auto;
 
     .center_box {
-      width: 325px;
-
+      width: 380px;
       z-index: 1;
-      padding: 32px;
+      padding: 36px 32px;
       text-align: center;
+      background: #ffffff;
+      border-radius: 16px;
+      border: 1px solid rgba(17, 24, 39, 0.06);
+      box-shadow: 0 10px 25px rgba(17, 24, 39, 0.08);
+
       .title {
-        font-size: 24px;
+        font-size: 26px;
+        font-weight: 700;
+        color: #111827; /* gray-900 */
       }
 
       .subtitle {
         margin-bottom: 24px;
+        color: #6b7280; /* gray-500 */
+      }
+
+      /* Modern input/button styling hooks */
+      .modern-input {
+        display: block;
+        border: 1px solid rgba(17, 24, 39, 0.12);
+        border-radius: 10px;
+        background: #fafafa;
+        transition: box-shadow 0.15s ease, border-color 0.15s ease, background 0.2s ease;
+      }
+      .modern-input:focus-within {
+        background: #fff;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+      }
+
+      .modern-primary-btn {
+        height: 44px;
+        border-radius: 10px;
+        background: linear-gradient(180deg, var(--primary) 0%, #1f5bff 100%);
+        color: #fff !important;
+        font-weight: 600;
+        transition: transform 0.06s ease, box-shadow 0.15s ease, filter 0.2s ease;
+        box-shadow: 0 6px 14px rgba(31, 91, 255, 0.25);
+      }
+      .modern-primary-btn:hover {
+        filter: brightness(1.03);
+        box-shadow: 0 8px 16px rgba(31, 91, 255, 0.3);
+      }
+      .modern-primary-btn:active {
+        transform: translateY(1px);
+      }
+
+      .internal-login {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .error-banner {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #fef2f2; /* red-50 */
+        border: 1px solid #fecaca; /* red-200 */
+        color: #991b1b; /* red-800 */
+        margin-bottom: 12px;
+      }
+      .error-banner__title {
+        font-weight: 600;
+      }
+      .error-banner__detail {
+        opacity: 0.9;
+        font-size: 12px;
+      }
+
+      .modern-spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255, 255, 255, 0.5);
+        border-top-color: #fff;
+        border-radius: 50%;
+        display: inline-block;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
       }
     }
   }
@@ -124,7 +232,8 @@
     }
     .blueBtn {
       background: var(--primary);
-      color: white;
+      color: #fff;
+      border-radius: 10px;
     }
     .btn:hover {
       cursor: pointer;

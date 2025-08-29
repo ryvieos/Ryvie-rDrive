@@ -133,7 +133,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     
     try {
       const remotePath = `${this.REMOTE_NAME}:${folderPath}`;
-      const cmd = `rclone lsjson "${remotePath}" --max-depth 1`;
+      const cmd = `rclone lsjson "${remotePath}" --max-depth 1 --fast-list`;
       
       const result = await new Promise<string>((resolve, reject) => {
         exec(cmd, (error, stdout, stderr) => {
@@ -225,22 +225,15 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
   async getAuthUrl(request?: any): Promise<string> {
     const redirectUri = encodeURIComponent(this.PROXY);
     
-    // Générer l'URL de callback dynamiquement pour pointer vers le backend
-    // mais en utilisant l'adresse accessible depuis l'extérieur
-    let callbackBase = '/v1/recover/Dropbox';
+    // Construire une URL de callback publique correcte derrière proxy
+    // Préférer les en-têtes X-Forwarded-* (fournis par Nginx) et utiliser le préfixe /api/v1
+    let callbackBase = '/api/v1/recover/Dropbox';
     if (request) {
-      const protocol = request.protocol || 'http';
-      let host = request.headers.host || 'localhost:4000';
-      
-      // Si l'host contient le port 4000 (backend), on le remplace par 4000
-      // pour s'assurer que le callback pointe vers le backend
-      if (host.includes(':3000')) {
-        host = host.replace(':3000', ':4000');
-      } else if (!host.includes(':')) {
-        host = `${host}:4000`;
-      }
-      
-      callbackBase = `${protocol}://${host}/v1/recover/Dropbox`;
+      const xfProto = (request.headers?.['x-forwarded-proto'] as string) || request.protocol || 'http';
+      const xfHost = (request.headers?.['x-forwarded-host'] as string) || request.headers?.host || 'localhost';
+      const protocol = xfProto.split(',')[0].trim();
+      const host = xfHost.split(',')[0].trim();
+      callbackBase = `${protocol}://${host}/api/v1/recover/Dropbox`;
     }
     
     const state = encodeURIComponent(callbackBase);
@@ -269,20 +262,14 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
   async getGoogleDriveAuthUrl(request?: any): Promise<string> {
     const redirectUri = encodeURIComponent(this.PROXY);
     
-    // Générer l'URL de callback dynamiquement pour pointer vers le backend Google Drive
-    let callbackBase = '/v1/recover/GoogleDrive';
+    // Construire une URL de callback publique correcte derrière proxy pour Google Drive
+    let callbackBase = '/api/v1/recover/GoogleDrive';
     if (request) {
-      const protocol = request.protocol || 'http';
-      let host = request.headers.host || 'localhost:4000';
-      
-      // Si l'host contient le port 3000 (frontend), on le remplace par 4000 (backend)
-      if (host.includes(':3000')) {
-        host = host.replace(':3000', ':4000');
-      } else if (!host.includes(':')) {
-        host = `${host}:4000`;
-      }
-      
-      callbackBase = `${protocol}://${host}/v1/recover/GoogleDrive`;
+      const xfProto = (request.headers?.['x-forwarded-proto'] as string) || request.protocol || 'http';
+      const xfHost = (request.headers?.['x-forwarded-host'] as string) || request.headers?.host || 'localhost';
+      const protocol = xfProto.split(',')[0].trim();
+      const host = xfHost.split(',')[0].trim();
+      callbackBase = `${protocol}://${host}/api/v1/recover/GoogleDrive`;
     }
     
     const state = encodeURIComponent(callbackBase);
@@ -426,54 +413,57 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     
     return new Promise(async (resolve, reject) => {
       const remotePath = `${actualRemoteName}:${path}`;
-      // Ajouter --hash pour Google Drive pour obtenir plus d'informations sur les fichiers
-      const cmd = provider === 'googledrive' 
-        ? `rclone lsjson "${remotePath}" --hash`
-        : `rclone lsjson "${remotePath}"`;
-      
-      logger.info(`🔧 Executing ${provider} rclone command:`, cmd);
-      
-      exec(cmd, async (error, stdout, stderr) => {
-        if (error) {
-          logger.error(`❌ ${provider} rclone command failed:`, { error: error.message, stderr });
-          reject(error);
-          return;
-        }
+      // Construire les arguments rclone en mode streaming pour éviter maxBuffer
+      const args: string[] = ['lsjson', remotePath, '--fast-list'];
+      if (provider === 'googledrive') {
+        args.push('--hash');
+      }
+      logger.info(`🔧 Executing ${provider} rclone (spawn) with args:`, args.join(' '));
 
-        if (stderr) {
-          logger.warn(`⚠️ ${provider} rclone stderr:`, stderr);
-        }
+      const child = spawn('rclone', args);
+      let stdoutData = '';
+      let stderrData = '';
 
-        logger.info(`📂 ${provider} rclone stdout length:`, stdout.length);
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdoutData += chunk.toString('utf8');
+      });
+
+      child.stderr.on('data', (chunk: Buffer) => {
+        const s = chunk.toString('utf8');
+        stderrData += s;
+      });
+
+      child.on('error', (err) => {
+        logger.error(`❌ ${provider} rclone process error:`, err);
+        reject(err);
+      });
+
+      child.on('close', async (code) => {
+        if (code !== 0) {
+          logger.error(`❌ ${provider} rclone exited with code ${code}:`, stderrData);
+          return reject(new Error(`rclone lsjson failed with code ${code}`));
+        }
 
         try {
-          const files = JSON.parse(stdout || '[]');
+          const files = JSON.parse(stdoutData || '[]');
           logger.info(`📊 ${provider} found ${files.length} files/folders`);
-          
-          // Debug: Log des fichiers retournés par rclone
+
           console.log(`📋 RCLONE RETURNED FOR ${provider}:`, {
             provider,
             actualRemoteName,
             fileCount: files.length,
-            files: files.map(f => ({ name: f.Name, isDir: f.IsDir, size: f.Size }))
+            files: files.map((f: any) => ({ name: f.Name, isDir: f.IsDir, size: f.Size }))
           });
-          
-          // Sauvegarder temporairement REMOTE_NAME pour approximateFolderSize
+
           const previousRemoteName = this.REMOTE_NAME;
           this.REMOTE_NAME = actualRemoteName;
-          
-          // Transformer les fichiers au format attendu par Twake Drive
+
           const transformedFiles = await Promise.all(files.map(async (file: any) => {
             let size = file.Size > 0 ? file.Size : 0;
-            
-            // Calculer approximativement la taille des dossiers
             if (file.IsDir) {
               size = await this.approximateFolderSize(`${path}${path ? '/' : ''}${file.Name}`);
             }
-            
-            // Formater la taille pour les gros dossiers
-            const formattedSize = size > 1024 * 1024 * 100 ? -1 : size; // -1 indiquera > 100MB
-            
+            const formattedSize = size > 1024 * 1024 * 100 ? -1 : size;
             return {
               id: file.ID || file.Path,
               name: file.Name,
@@ -486,13 +476,11 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
               source: provider
             };
           }));
-          
-          // Restaurer REMOTE_NAME AVANT de résoudre
+
           this.REMOTE_NAME = previousRemoteName;
-          
           resolve(transformedFiles);
         } catch (parseError) {
-          logger.error(`📁 Failed to parse ${provider} rclone output:`, { parseError, stdout });
+          logger.error(`📁 Failed to parse ${provider} rclone output:`, { parseError, stdout: stdoutData });
           reject(new Error(`Failed to parse ${provider} file list`));
         }
       });
@@ -552,10 +540,10 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     try {
       // 1. Lister tous les fichiers Dropbox récursivement
       const remotePath = `${this.REMOTE_NAME}:${dropboxPath}`;
-      const listCommand = `rclone lsjson --recursive "${remotePath}"`;
+      const listCommand = `rclone lsjson --recursive "${remotePath}" --fast-list`;
       
       logger.info(`📋 Listing files: ${listCommand}`);
-      const { stdout } = await execAsync(listCommand, { maxBuffer: 10 * 1024 * 1024 });
+      const { stdout } = await execAsync(listCommand, { maxBuffer: 100 * 1024 * 1024 });
       
       const files = JSON.parse(stdout).filter((item: any) => !item.IsDir);
       logger.info(`📊 Found ${files.length} files to sync`);
@@ -1002,9 +990,8 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     const apiPrefix = "/api/v1";
     
     // 1) Generate AuthUrl for Dropbox OAuth
-    // Le frontend appelle /v1/drivers/Dropbox (sans le préfixe api)
-    // ... (le reste du code reste inchangé)
-    fastify.get(`/v1/drivers/Dropbox`, async (request: any, reply) => {
+    // Le frontend appelle /api/v1/drivers/Dropbox
+    fastify.get(`${apiPrefix}/drivers/Dropbox`, async (request: any, reply) => {
       // Récupérer l'email utilisateur depuis les query parameters
       const userEmail = request.query.userEmail as string || 'default@user.com';
       logger.info('📧 Email utilisateur reçu:', userEmail);
@@ -1023,8 +1010,8 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     });
     
     // 2) OAuth callback
-    // Le frontend s'attend à recevoir une redirection vers cette route
-    fastify.get(`/v1/recover/Dropbox`, async (request: any, reply) => {
+    // Le frontend s'attend à recevoir une redirection vers cette route (/api/v1)
+    fastify.get(`${apiPrefix}/recover/Dropbox`, async (request: any, reply) => {
       const fullUrl = `${request.protocol}://${request.hostname}${request.url}`;
       logger.info('🔔 Callback received:', fullUrl);
 
@@ -1079,9 +1066,50 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         });
 
         // Redirection automatique vers rdrive après authentification réussie
-        // Extraire le hostname sans port pour éviter les URLs malformées
-        const hostname = request.hostname.split(':')[0];
-        const redirectUrl = `${request.protocol}://${hostname}:3000/client`;
+        // 1) Priorité: en-têtes X-Forwarded-* fournis par Nginx (préservent le port)
+        let redirectUrl: string;
+        const xfProtoHeader = request.headers?.['x-forwarded-proto'] as string | undefined;
+        const xfHostHeader = request.headers?.['x-forwarded-host'] as string | undefined;
+        const xfProto = xfProtoHeader ? xfProtoHeader.split(',')[0].trim() : undefined;
+        const xfHost = xfHostHeader ? xfHostHeader.split(',')[0].trim() : undefined;
+        if (xfProto && xfHost) {
+          redirectUrl = `${xfProto}://${xfHost}/client`;
+          logger.info(`Redirection via X-Forwarded headers: ${redirectUrl}`);
+        }
+        
+        // 2) Fallback: Origin
+        if (!redirectUrl) {
+          const origin = request.headers.origin as string | undefined;
+          if (origin) {
+            redirectUrl = `${origin}/client`;
+            logger.info(`Redirection via Origin: ${redirectUrl}`);
+          }
+        }
+        
+        // 3) Fallback: Referer
+        if (!redirectUrl) {
+          try {
+            const referer = request.headers.referer as string | undefined;
+            if (referer) {
+              const refererUrl = new URL(referer);
+              const port = refererUrl.port;
+              const hostWithPort = port ? `${refererUrl.hostname}:${port}` : refererUrl.hostname;
+              redirectUrl = `${refererUrl.protocol}//${hostWithPort}/client`;
+              logger.info(`Redirection via Referer: ${redirectUrl}`);
+            }
+          } catch (e) {
+            logger.info(`Erreur lors du parsing du Referer: ${e.message}`);
+          }
+        }
+        
+        // 4) Fallback final: Host + protocol de la requête
+        if (!redirectUrl) {
+          const reqHost = request.headers.host || request.hostname;
+          const reqProto = (request.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || request.protocol || 'http';
+          redirectUrl = `${reqProto}://${reqHost}/client`;
+          logger.info(`Fallback final: ${redirectUrl}`);
+        }
+        
         logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);
         
         // Envoyer une page HTML avec redirection automatique
@@ -1711,7 +1739,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     // ========== GOOGLE DRIVE ROUTES ==========
     
     // 1) Generate AuthUrl for Google Drive OAuth
-    fastify.get(`/v1/drivers/GoogleDrive`, async (request: any, reply) => {
+    fastify.get(`${apiPrefix}/drivers/GoogleDrive`, async (request: any, reply) => {
       // Récupérer l'email utilisateur depuis les query parameters
       const userEmail = request.query.userEmail as string || 'default@user.com';
       logger.info('📧 Email utilisateur reçu pour Google Drive:', userEmail);
@@ -1728,7 +1756,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     });
     
     // 2) OAuth callback for Google Drive
-    fastify.get(`/v1/recover/GoogleDrive`, async (request: any, reply) => {
+    fastify.get(`${apiPrefix}/recover/GoogleDrive`, async (request: any, reply) => {
       const fullUrl = `${request.protocol}://${request.hostname}${request.url}`;
       logger.info('🔔 Google Drive Callback received:', fullUrl);
 
@@ -1782,9 +1810,50 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         });
 
         // Redirection automatique vers rdrive après authentification réussie
-        // Extraire le hostname sans port pour éviter les URLs malformées
-        const hostname = request.hostname.split(':')[0];
-        const redirectUrl = `${request.protocol}://${hostname}:3000/client`;
+        // 1) Priorité: en-têtes X-Forwarded-* fournis par Nginx (préservent le port)
+        let redirectUrl: string;
+        const gXfProtoHeader = request.headers?.['x-forwarded-proto'] as string | undefined;
+        const gXfHostHeader = request.headers?.['x-forwarded-host'] as string | undefined;
+        const gXfProto = gXfProtoHeader ? gXfProtoHeader.split(',')[0].trim() : undefined;
+        const gXfHost = gXfHostHeader ? gXfHostHeader.split(',')[0].trim() : undefined;
+        if (gXfProto && gXfHost) {
+          redirectUrl = `${gXfProto}://${gXfHost}/client`;
+          logger.info(`Redirection via X-Forwarded headers (GDrive): ${redirectUrl}`);
+        }
+        
+        // 2) Fallback: Origin
+        if (!redirectUrl) {
+          const origin = request.headers.origin as string | undefined;
+          if (origin) {
+            redirectUrl = `${origin}/client`;
+            logger.info(`Redirection via Origin (GDrive): ${redirectUrl}`);
+          }
+        }
+        
+        // 3) Fallback: Referer
+        if (!redirectUrl) {
+          try {
+            const referer = request.headers.referer as string | undefined;
+            if (referer) {
+              const refererUrl = new URL(referer);
+              const port = refererUrl.port;
+              const hostWithPort = port ? `${refererUrl.hostname}:${port}` : refererUrl.hostname;
+              redirectUrl = `${refererUrl.protocol}//${hostWithPort}/client`;
+              logger.info(`Redirection via Referer (GDrive): ${redirectUrl}`);
+            }
+          } catch (e) {
+            logger.info(`Erreur lors du parsing du Referer (GDrive): ${e.message}`);
+          }
+        }
+        
+        // 4) Fallback final: Host + protocol de la requête
+        if (!redirectUrl) {
+          const reqHost = request.headers.host || request.hostname;
+          const reqProto = (request.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || request.protocol || 'http';
+          redirectUrl = `${reqProto}://${reqHost}/client`;
+          logger.info(`Fallback final (GDrive): ${redirectUrl}`);
+        }
+        
         logger.info(`🔀 Redirecting to rdrive: ${redirectUrl}`);
         
         // Envoyer une page HTML avec redirection automatique

@@ -9,7 +9,7 @@ import Version from '@environment/version';
 class LanguagesService extends Observable {
   private i18nt: Function | null = null;
   private language = '';
-  private default = 'en';
+  private default = 'fr';
   private available = [
     'de',
     'en',
