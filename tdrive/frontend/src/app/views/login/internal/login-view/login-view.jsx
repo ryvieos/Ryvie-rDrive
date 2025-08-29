@@ -34,42 +34,40 @@ export default class LoginView extends Component {
     return (
       <div className="center_box_container login_view fade_in">
         <div className="center_box white_box_with_shadow">
-          <div className="title">
-            {!((InitService.server_infos || {}).branding || {}).logo &&
-              this.state.i18n.t('scenes.login.home.title')}
+          {/* Branding block: logo + title */}
+          <div className="brand-block">
+            <img
+              className="brand-logo"
+              alt={((InitService.server_infos || {}).branding || {}).name || 'rDrive'}
+              src={
+                ((InitService.server_infos || {}).branding || {}).logo || '/public/img/logo/logo-color.svg'
+              }
+            />
+            <div className="brand-title">
+              {this.state.i18n.t('scenes.login.home.title')}
+            </div>
           </div>
 
-          {!((InitService.server_infos || {}).branding || {}).logo && (
-            <div className="subtitle" style={{ marginBottom: 24 }}>
-              {this.state.i18n.t('scenes.login.home.subtitle')} <Emojione type=":innocent:" />
-            </div>
-          )}
-
-          {!!((InitService.server_infos || {}).branding || {}).logo && (
-            <img
-              alt={((InitService.server_infos || {}).branding || {}).logo}
-              style={{ marginBottom: 40, marginTop: 10, width: 140 }}
-              src={((InitService.server_infos || {}).branding || {}).logo}
-            />
-          )}
-
           {this.state.login.external_login_error && (
-            <div id="identification_information" className="smalltext error">
-              Unable to login: {this.state.login.external_login_error}
+            <div id="identification_information" className="error-banner" role="alert">
+              <span className="error-banner__title">
+                {this.state.i18n.t('scenes.login.home.unable_to_connect')}
+              </span>
+              <span className="error-banner__detail">
+                {this.state.login.external_login_error}
+              </span>
             </div>
           )}
 
           {(Object.keys((InitService.server_infos || {}).auth || []).indexOf('internal') >= 0 ||
             ((InitService.server_infos || {}).auth || []).length === 0) && (
-            <div className="internal-login">
+            <div className="internal-login" aria-busy={this.state.login.login_loading}>
               <Input
                 id="username"
                 type="text"
-                className={
-                  'bottom-margin medium full_width ' +
-                  (this.state.login.login_error ? 'error ' : '')
-                }
+                className={'bottom-margin medium full_width modern-input ' + (this.state.login.login_error ? 'error ' : '')}
                 placeholder={this.state.i18n.t('scenes.login.home.email')}
+                disabled={this.state.login.login_loading}
                 onKeyDown={e => {
                   if (e.keyCode === 13 && !this.state.login.login_loading) {
                     LoginService.login({
@@ -86,11 +84,9 @@ export default class LoginView extends Component {
               <Input
                 id="password"
                 type="password"
-                className={
-                  'bottom-margin medium full_width ' +
-                  (this.state.login.login_error ? 'error ' : '')
-                }
+                className={'bottom-margin medium full_width modern-input ' + (this.state.login.login_error ? 'error ' : '')}
                 placeholder={this.state.i18n.t('scenes.login.home.password')}
+                disabled={this.state.login.login_loading}
                 onKeyDown={e => {
                   if (e.keyCode === 13 && !this.state.login.login_loading) {
                     LoginService.login({
@@ -113,8 +109,8 @@ export default class LoginView extends Component {
               <Button
                 id="login_btn"
                 type="button"
-                className="medium full_width "
-                style={{ marginBottom: 8 }}
+                className="medium full_width modern-primary-btn"
+                style={{ marginBottom: 12 }}
                 disabled={this.state.login.login_loading}
                 onClick={() =>
                   LoginService.login({
@@ -125,18 +121,13 @@ export default class LoginView extends Component {
                 }
                 testClassId="login-button-submit"
               >
-                {this.state.i18n.t('scenes.login.home.login_btn')}
+                {this.state.login.login_loading ? (
+                  <span className="modern-spinner" aria-hidden="true" />
+                ) : (
+                  this.state.i18n.t('scenes.login.home.login_btn')
+                )}
               </Button>
-              {!InitService.server_infos?.configuration?.accounts?.internal
-                ?.disable_account_creation && (
-                <Typography.Link
-                  onClick={() => this.state.login.changeState('signin')}
-                  id="create_btn"
-                  className="blue_link"
-                >
-                  {this.state.i18n.t('scenes.login.home.create_account')}
-                </Typography.Link>
-              )}
+              {/* Sign-up entry removed per product requirement */}
             </div>
           )}
         </div>

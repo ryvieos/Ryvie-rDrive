@@ -8,7 +8,6 @@ import LoginService from '@features/auth/login-service';
 import Icon from '@components/icon/icon.jsx';
 
 import LoginView from './login-view/login-view';
-import Signin from './signin/signin.jsx';
 import Error from './error';
 
 import './login.scss';
@@ -36,29 +35,13 @@ export default () => {
 
   return (
     <div className="loginPage">
-      {server_infos_loaded && !server_infos?.configuration?.branding?.name && (
-        <div className="tdrive_logo" />
-      )}
+      {/* Top-left legacy logo removed to avoid duplication; logo now inside the card */}
 
       {LoginService.state === 'error' && <Error />}
       {LoginService.state === 'logged_out' && <LoginView />}
-      {LoginService.state === 'signin' && <Signin />}
+      {/* Account creation disabled: hide Signin view */}
 
-      <div className={'app_version_footer '}>
-        <div className="version_name fade_in">rDrive {Globals.version.version_name}</div>
-        <div style={{ height: 20 }}>
-          {server_infos_loaded && server_infos?.configuration?.branding?.name && (
-            <div className="smalltext fade_in">
-              {server_infos?.configuration?.branding?.name &&
-                Languages.t('scenes.login.footer.branding', [
-                  server_infos?.configuration?.branding?.name,
-                  server_infos?.configuration?.branding.link || 'tdrive.app',
-                ])}
-              {' - ' + Globals.version.version}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Footer branding/version removed per request */}
 
       <div className={'help_footer'}>
         {server_infos_loaded && server_infos?.configuration?.help_url && (
