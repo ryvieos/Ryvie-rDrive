@@ -133,7 +133,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     
     try {
       const remotePath = `${this.REMOTE_NAME}:${folderPath}`;
-      const cmd = `rclone lsjson "${remotePath}" --max-depth 1`;
+      const cmd = `rclone lsjson "${remotePath}" --max-depth 1 --fast-list`;
       
       const result = await new Promise<string>((resolve, reject) => {
         exec(cmd, (error, stdout, stderr) => {
@@ -413,54 +413,57 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     
     return new Promise(async (resolve, reject) => {
       const remotePath = `${actualRemoteName}:${path}`;
-      // Ajouter --hash pour Google Drive pour obtenir plus d'informations sur les fichiers
-      const cmd = provider === 'googledrive' 
-        ? `rclone lsjson "${remotePath}" --hash`
-        : `rclone lsjson "${remotePath}"`;
-      
-      logger.info(`🔧 Executing ${provider} rclone command:`, cmd);
-      
-      exec(cmd, async (error, stdout, stderr) => {
-        if (error) {
-          logger.error(`❌ ${provider} rclone command failed:`, { error: error.message, stderr });
-          reject(error);
-          return;
-        }
+      // Construire les arguments rclone en mode streaming pour éviter maxBuffer
+      const args: string[] = ['lsjson', remotePath, '--fast-list'];
+      if (provider === 'googledrive') {
+        args.push('--hash');
+      }
+      logger.info(`🔧 Executing ${provider} rclone (spawn) with args:`, args.join(' '));
 
-        if (stderr) {
-          logger.warn(`⚠️ ${provider} rclone stderr:`, stderr);
-        }
+      const child = spawn('rclone', args);
+      let stdoutData = '';
+      let stderrData = '';
 
-        logger.info(`📂 ${provider} rclone stdout length:`, stdout.length);
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdoutData += chunk.toString('utf8');
+      });
+
+      child.stderr.on('data', (chunk: Buffer) => {
+        const s = chunk.toString('utf8');
+        stderrData += s;
+      });
+
+      child.on('error', (err) => {
+        logger.error(`❌ ${provider} rclone process error:`, err);
+        reject(err);
+      });
+
+      child.on('close', async (code) => {
+        if (code !== 0) {
+          logger.error(`❌ ${provider} rclone exited with code ${code}:`, stderrData);
+          return reject(new Error(`rclone lsjson failed with code ${code}`));
+        }
 
         try {
-          const files = JSON.parse(stdout || '[]');
+          const files = JSON.parse(stdoutData || '[]');
           logger.info(`📊 ${provider} found ${files.length} files/folders`);
-          
-          // Debug: Log des fichiers retournés par rclone
+
           console.log(`📋 RCLONE RETURNED FOR ${provider}:`, {
             provider,
             actualRemoteName,
             fileCount: files.length,
-            files: files.map(f => ({ name: f.Name, isDir: f.IsDir, size: f.Size }))
+            files: files.map((f: any) => ({ name: f.Name, isDir: f.IsDir, size: f.Size }))
           });
-          
-          // Sauvegarder temporairement REMOTE_NAME pour approximateFolderSize
+
           const previousRemoteName = this.REMOTE_NAME;
           this.REMOTE_NAME = actualRemoteName;
-          
-          // Transformer les fichiers au format attendu par Twake Drive
+
           const transformedFiles = await Promise.all(files.map(async (file: any) => {
             let size = file.Size > 0 ? file.Size : 0;
-            
-            // Calculer approximativement la taille des dossiers
             if (file.IsDir) {
               size = await this.approximateFolderSize(`${path}${path ? '/' : ''}${file.Name}`);
             }
-            
-            // Formater la taille pour les gros dossiers
-            const formattedSize = size > 1024 * 1024 * 100 ? -1 : size; // -1 indiquera > 100MB
-            
+            const formattedSize = size > 1024 * 1024 * 100 ? -1 : size;
             return {
               id: file.ID || file.Path,
               name: file.Name,
@@ -473,13 +476,11 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
               source: provider
             };
           }));
-          
-          // Restaurer REMOTE_NAME AVANT de résoudre
+
           this.REMOTE_NAME = previousRemoteName;
-          
           resolve(transformedFiles);
         } catch (parseError) {
-          logger.error(`📁 Failed to parse ${provider} rclone output:`, { parseError, stdout });
+          logger.error(`📁 Failed to parse ${provider} rclone output:`, { parseError, stdout: stdoutData });
           reject(new Error(`Failed to parse ${provider} file list`));
         }
       });
@@ -539,10 +540,10 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     try {
       // 1. Lister tous les fichiers Dropbox récursivement
       const remotePath = `${this.REMOTE_NAME}:${dropboxPath}`;
-      const listCommand = `rclone lsjson --recursive "${remotePath}"`;
+      const listCommand = `rclone lsjson --recursive "${remotePath}" --fast-list`;
       
       logger.info(`📋 Listing files: ${listCommand}`);
-      const { stdout } = await execAsync(listCommand, { maxBuffer: 10 * 1024 * 1024 });
+      const { stdout } = await execAsync(listCommand, { maxBuffer: 100 * 1024 * 1024 });
       
       const files = JSON.parse(stdout).filter((item: any) => !item.IsDir);
       logger.info(`📊 Found ${files.length} files to sync`);

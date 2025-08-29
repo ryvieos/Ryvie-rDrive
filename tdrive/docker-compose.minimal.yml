@@ -3,6 +3,7 @@ version: "3.4"
 services:
   mongo:
     container_name: app-rdrive-mongo
+    restart: unless-stopped
     image: mongo
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
@@ -58,6 +59,7 @@ services:
   node:
     container_name: app-rdrive-node
     build: *backend_docker_build
+    restart: unless-stopped
     ports:
       - 4000:4000
       - 9229:9229
@@ -77,6 +79,7 @@ services:
     build:
       context: .
       dockerfile: docker/tdrive-frontend/Dockerfile
+      restart: unless-stopped
       args:
         REACT_APP_FRONTEND_URL: "https://rdrive.demo.ryvie.fr"
         REACT_APP_BACKEND_URL: "https://backend.rdrive.demo.ryvie.fr"

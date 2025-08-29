@@ -126,9 +126,19 @@ export default memo(
     const memoizedItems = useMemo(() => children || [], [children]);
     const itemsCount = memoizedItems.length;
     
-    // Virtualisation légère pour les grandes listes (> 50 items)
-    const shouldVirtualize = itemsCount > 50;
-    const [visibleRange, setVisibleRange] = useState({ start: 0, end: shouldVirtualize ? 50 : itemsCount });
+    // Virtualisation légère pour les grandes listes
+    const VIRT_PAGE_SIZE = 200;
+    const VIRT_THRESHOLD = 100; // déclenchement de chargement quand on s'approche du bas
+    const shouldVirtualize = itemsCount > VIRT_PAGE_SIZE;
+    const [visibleRange, setVisibleRange] = useState({
+      start: 0,
+      end: shouldVirtualize ? Math.min(VIRT_PAGE_SIZE, itemsCount) : itemsCount,
+    });
+    
+    // Réinitialiser la fenêtre visible lors d'un changement d'items
+    useEffect(() => {
+      setVisibleRange({ start: 0, end: shouldVirtualize ? Math.min(VIRT_PAGE_SIZE, itemsCount) : itemsCount });
+    }, [itemsCount, shouldVirtualize]);
     
     const visibleItems = useMemo(() => {
       return shouldVirtualize 
@@ -267,9 +277,17 @@ export default memo(
     const scrollViewer = useRef<HTMLDivElement>(null);
 
     const handleScroll = async () => {
-      const scrollTop = scrollViewer.current?.scrollTop || 0;
-      const scrollHeight = scrollViewer.current?.scrollHeight || 0;
-      const clientHeight = scrollViewer.current?.clientHeight || 0;
+      const el = scrollViewer.current;
+      if (!el) return;
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const nearBottom = scrollTop + clientHeight + VIRT_THRESHOLD >= scrollHeight;
+
+      // Étendre la fenêtre visible côté client pour grandes listes
+      if (shouldVirtualize && nearBottom && visibleRange.end < itemsCount) {
+        setVisibleRange((v: { start: number; end: number }) => ({ start: 0, end: Math.min(v.end + VIRT_PAGE_SIZE, itemsCount) }));
+      }
+
+      // Continuer à charger côté store quand nécessaire
       if (scrollTop > 0 && scrollTop + clientHeight >= scrollHeight) {
         await loadNextPage(parentId);
       }
@@ -686,6 +704,18 @@ export default memo(
                     ) : (
                       draggableMarkup(index, child)
                     ),
+                  )}
+                  {shouldVirtualize && visibleRange.end < itemsCount && (
+                    <div className="flex justify-center py-4">
+                      <Button
+                        theme="secondary"
+                        onClick={() =>
+                          setVisibleRange((v: { start: number; end: number }) => ({ start: 0, end: Math.min(v.end + VIRT_PAGE_SIZE, itemsCount) }))
+                        }
+                      >
+                        Charger plus ({visibleRange.end}/{itemsCount})
+                      </Button>
+                    </div>
                   )}
                   <DragOverlay>
                     {activeIndex ? (
