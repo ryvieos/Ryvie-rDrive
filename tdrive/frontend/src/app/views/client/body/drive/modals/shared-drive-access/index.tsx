@@ -11,6 +11,7 @@ import { ToasterService } from '@features/global/services/toaster-service';
 export type SharedDriveModalType = {
   open: boolean;
   id: string;
+  ids?: string[];
 };
 
 export const SharedDriveModalAtom = atom<SharedDriveModalType>({
@@ -30,16 +31,17 @@ export const SharedDriveModal = () => {
       className='!overflow-visible testid:shared-drive-modal'
       onClose={closeModal}
       >
-      {!!state.id && <SharedDriveModalContent id={state.id} onCloseModal={closeModal} />}
+      {!!state.id && <SharedDriveModalContent id={state.id} ids={state.ids} onCloseModal={closeModal} />}
     </Modal>
   );
 };
 
 const SharedDriveModalContent = (props: {
   id: string,
+  ids?: string[],
   onCloseModal: () => void,
 }) => {
-  const { id } = props;
+  const { id, ids } = props;
   const { item, loading, refresh } = useDriveItem(id);
   const { update } = useDriveActions();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -58,34 +60,32 @@ const SharedDriveModalContent = (props: {
 
   const shareToSharedDrive = async (accessLevel: 'read' | 'write' | 'manage') => {
     if (!item) return;
-    
+
     setIsUpdating(true);
     try {
-      ToasterService.info(`Partage vers Shared Drive en cours (${accessLevel})...`);
+      const targets = (ids && ids.length ? ids : [id]);
+      ToasterService.info(`Partage vers Shared Drive en cours (${accessLevel}) pour ${targets.length} élément(s)...`);
       
       // Ajouter ou mettre à jour l'entité "shared_drive" aux permissions existantes
-      const updatedAccess = {
-        ...currentAccessInfo,
+      const buildUpdated = (current: DriveItem['access_info']) => ({
+        ...current,
         entities: [
-          ...(currentAccessInfo.entities?.filter(entity => 
-            !(entity.type === "folder" && entity.id === "shared_drive")
-          ) || []),
-          {
-            type: "folder" as const,
-            id: "shared_drive",
-            level: accessLevel,
-          }
-        ]
-      };
-      
-      await update(
-        {
-          access_info: updatedAccess,
-        },
-        item.id,
-        item.parent_id,
-        item.name
-      );
+          ...(current?.entities?.filter(entity => !(entity.type === 'folder' && entity.id === 'shared_drive')) || []),
+          { type: 'folder' as const, id: 'shared_drive', level: accessLevel },
+        ],
+      });
+
+      for (const targetId of targets) {
+        // If first item, we already have currentAccessInfo; others will rely on minimal update
+        const current = targetId === id ? currentAccessInfo : { entities: [] };
+        const updatedAccess = buildUpdated(current as any);
+        await update(
+          { access_info: updatedAccess },
+          targetId,
+          item.parent_id,
+          item.name,
+        );
+      }
       
       const accessLevelText = {
         read: 'lecture seule',
@@ -93,11 +93,11 @@ const SharedDriveModalContent = (props: {
         manage: 'gestion complète'
       }[accessLevel];
       
-      ToasterService.success(`"${item.name}" partagé dans Shared Drive avec accès ${accessLevelText}.`);
-      await refresh(id); // Rafraîchir les données
+      ToasterService.success(`${targets.length} élément(s) partagé(s) dans Shared Drive avec accès ${accessLevelText}.`);
+      await refresh(id); // Rafraîchir les données de l'élément affiché
     } catch (error) {
       console.error('Error sharing to Shared Drive:', error);
-      ToasterService.error(`Erreur lors du partage de "${item.name}" dans Shared Drive.`);
+      ToasterService.error(`Erreur lors du partage dans Shared Drive.`);
     } finally {
       setIsUpdating(false);
     }
@@ -108,30 +108,30 @@ const SharedDriveModalContent = (props: {
     
     setIsUpdating(true);
     try {
-      ToasterService.info('Suppression du partage Shared Drive en cours...');
+      const targets = (ids && ids.length ? ids : [id]);
+      ToasterService.info(`Suppression du partage Shared Drive en cours pour ${targets.length} élément(s)...`);
       
-      // Supprimer l'entité "shared_drive" des permissions
-      const updatedAccess = {
-        ...currentAccessInfo,
-        entities: currentAccessInfo.entities?.filter(entity => 
-          !(entity.type === "folder" && entity.id === "shared_drive")
-        ) || []
-      };
+      const buildUpdated = (current: DriveItem['access_info']) => ({
+        ...current,
+        entities: current?.entities?.filter(entity => !(entity.type === 'folder' && entity.id === 'shared_drive')) || [],
+      });
+
+      for (const targetId of targets) {
+        const current = targetId === id ? currentAccessInfo : { entities: [] };
+        const updatedAccess = buildUpdated(current as any);
+        await update(
+          { access_info: updatedAccess },
+          targetId,
+          item.parent_id,
+          item.name,
+        );
+      }
       
-      await update(
-        {
-          access_info: updatedAccess,
-        },
-        item.id,
-        item.parent_id,
-        item.name
-      );
-      
-      ToasterService.success(`"${item.name}" retiré du Shared Drive.`);
-      await refresh(id); // Rafraîchir les données
+      ToasterService.success(`${targets.length} élément(s) retiré(s) du Shared Drive.`);
+      await refresh(id); // Rafraîchir les données de l'élément affiché
     } catch (error) {
       console.error('Error removing from Shared Drive:', error);
-      ToasterService.error(`Erreur lors de la suppression de "${item.name}" du Shared Drive.`);
+      ToasterService.error(`Erreur lors de la suppression du Shared Drive.`);
     } finally {
       setIsUpdating(false);
     }
@@ -142,7 +142,7 @@ const SharedDriveModalContent = (props: {
       title={
           <>
             {'Partage Shared Drive - '}
-            <strong>{item?.name}</strong>
+            <strong>{(ids && ids.length > 1) ? `${ids.length} éléments` : item?.name}</strong>
           </>
         }
       >

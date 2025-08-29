@@ -1,4 +1,4 @@
-import { ChevronDownIcon, RefreshIcon, ViewGridIcon, ViewListIcon } from '@heroicons/react/outline';
+import { ChevronDownIcon, RefreshIcon, ViewGridIcon, ViewListIcon, TrashIcon, DotsVerticalIcon } from '@heroicons/react/outline';
 import { Button } from '@atoms/button/button';
 import { Base, BaseSmall, Subtitle, Title } from '@atoms/text';
 import Menu from '@components/menus/menu';
@@ -29,6 +29,8 @@ import { FolderRowSkeleton } from './documents/folder-row-skeleton';
 import HeaderPath from './header-path';
 import { ConfirmDeleteModal } from './modals/confirm-delete';
 import { ConfirmTrashModal } from './modals/confirm-trash';
+import { ConfirmDeleteModalAtom } from './modals/confirm-delete';
+import { ConfirmTrashModalAtom } from './modals/confirm-trash';
 import { CreateModalAtom } from './modals/create';
 import { UploadModelAtom } from './modals/upload';
 import { PropertiesModal } from './modals/properties';
@@ -186,6 +188,7 @@ export default memo(
     const documents = items.filter(i => !i.is_directory);
 
     const selectedCount = Object.values(checked).filter(v => v).length;
+    const selectedItems = useMemo(() => (children || []).filter(c => checked[c.id]), [children, checked]);
 
     const onBuildContextMenu = useOnBuildContextMenu(children, initialParentId, inPublicSharing);
     const onBuildSortContextMenu = useOnBuildSortContextMenu();
@@ -210,6 +213,8 @@ export default memo(
     const buildPeopleContextMen = useOnBuildPeopleContextMenu();
     const buildDateContextMenu = useOnBuildDateContextMenu();
     const setConfirmModalState = useSetRecoilState(ConfirmModalAtom);
+    const setConfirmDeleteModalState = useSetRecoilState(ConfirmDeleteModalAtom);
+    const setConfirmTrashModalState = useSetRecoilState(ConfirmTrashModalAtom);
     const [activeIndex, setActiveIndex] = useState(null);
     const [activeChild, setActiveChild] = useState(null);
     const { update } = useDriveActions();
@@ -623,6 +628,38 @@ export default memo(
                       </>
                     )}
                   </Button>
+                )}
+
+                {/* Bulk actions when selection exists */}
+                {selectedCount > 0 && buttonsVisible && (
+                  <>
+                    <Button
+                      theme={'secondary'}
+                      className="ml-2 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-red-600 px-2 md:px-3"
+                      disabled={access !== 'manage'}
+                      onClick={() => {
+                        if (inTrash) {
+                          setConfirmDeleteModalState({ open: true, items: selectedItems as any });
+                        } else {
+                          setConfirmTrashModalState({ open: true, items: selectedItems as any });
+                        }
+                      }}
+                      testClassId="button-bulk-delete"
+                    >
+                      <TrashIcon className="h-4 w-4 mr-2 -ml-1" />
+                      <span>{inTrash ? 'Supprimer' : 'Corbeille'}</span>
+                    </Button>
+
+                    <Menu menu={() => onBuildContextMenu(details, selectedCount === 1 ? selectedItems[0] : undefined)} testClassId="browser-menu-bulk-actions">
+                      <Button
+                        theme="secondary"
+                        className="ml-2 flex flex-row items-center bg-transparent md:bg-blue-500 md:bg-opacity-25 !text-gray-500 md:!text-blue-500 px-2 md:px-3"
+                        testClassId="button-bulk-actions"
+                      >
+                        <DotsVerticalIcon className="h-5 w-5" />
+                      </Button>
+                    </Menu>
+                  </>
                 )}
                 
                 {/* Bouton de synchronisation Dropbox */}

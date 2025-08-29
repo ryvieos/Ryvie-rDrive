@@ -434,7 +434,9 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
     async (update: Partial<DriveItem> & { is_update_access_to_share_link?: boolean }, id: string, parentId: string, previousName?: string) => {
       try {
         const newItem = await DriveApiClient.update(companyId, id, update);
-        if (previousName && previousName !== newItem.name && !update.name)
+        // Show rename warning only if this is not an access_info-only update
+        const isAccessOnly = !!(update as any)?.access_info;
+        if (previousName && previousName !== newItem.name && !update.name && !isAccessOnly)
           ToasterService.warn(
             Languages.t('hooks.use-drive-actions.update_caused_a_rename', [
               previousName,
