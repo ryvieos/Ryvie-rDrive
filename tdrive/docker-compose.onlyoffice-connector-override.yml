@@ -4,14 +4,14 @@ services:
   onlyoffice-connector:
     container_name: app-rdrive-onlyoffice-connector
     image: twakedrive/onlyoffice-connector:latest
+    restart: unless-stopped
     environment:
+      - SERVER_ORIGIN=${REACT_APP_ONLYOFFICE_CONNECTOR_URL}
+      - CREDENTIALS_ENDPOINT=${REACT_APP_BACKEND_URL}
+      - ONLY_OFFICE_SERVER=${REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL}
       - SERVER_PORT=5000
       - SERVER_PREFIX=/plugins/onlyoffice/
-      - SERVER_ORIGIN=https://connector.rdrive.test.ryvie.fr
-      - CREDENTIALS_ENDPOINT=https://backend.rdrive.test.ryvie.fr/
-      - ONLY_OFFICE_SERVER=https://document.rdrive.test.ryvie.fr/
       - CREDENTIALS_ID=tdrive_onlyoffice
       - CREDENTIALS_SECRET=c1cc66db78e1d3bb4713c55d5ab2
     # Utiliser le même mode réseau que dans le fichier original
     network_mode: host
-    restart: unless-stopped
