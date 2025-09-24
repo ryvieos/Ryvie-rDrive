@@ -21,6 +21,7 @@ services:
 
   node_create_user:
     container_name: app-rdrive-node-create-user
+    restart: unless-stopped
     build: &backend_docker_build
       context: .
       dockerfile: docker/tdrive-node/Dockerfile
@@ -58,8 +59,8 @@ services:
 
   node:
     container_name: app-rdrive-node
-    build: *backend_docker_build
     restart: unless-stopped
+    build: *backend_docker_build
     ports:
       - 4000:4000
       - 9229:9229
@@ -79,12 +80,8 @@ services:
     build:
       context: .
       dockerfile: docker/tdrive-frontend/Dockerfile
-      args:
-        REACT_APP_FRONTEND_URL: "https://rdrive.demo.ryvie.fr"
-        REACT_APP_BACKEND_URL: "https://backend.rdrive.demo.ryvie.fr"
-        REACT_APP_WEBSOCKET_URL: "wss://backend.rdrive.demo.ryvie.fr/ws"
-        REACT_APP_ONLYOFFICE_CONNECTOR_URL: "https://connector.rdrive.demo.ryvie.fr"
-        REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL: "https://document.rdrive.demo.ryvie.fr"
+      env_file:
+        - .env
     container_name: app-rdrive-frontend
     environment:
       - DEV=production
