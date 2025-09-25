@@ -80,8 +80,12 @@ services:
     build:
       context: .
       dockerfile: docker/tdrive-frontend/Dockerfile
-      env_file:
-        - .env
+      args:
+        REACT_APP_FRONTEND_URL: ${REACT_APP_FRONTEND_URL}
+        REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL}
+        REACT_APP_WEBSOCKET_URL: ${REACT_APP_WEBSOCKET_URL}
+        REACT_APP_ONLYOFFICE_CONNECTOR_URL: ${REACT_APP_ONLYOFFICE_CONNECTOR_URL}
+        REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL: ${REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL}
     container_name: app-rdrive-frontend
     environment:
       - DEV=production
