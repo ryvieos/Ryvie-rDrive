@@ -12,7 +12,7 @@ services:
       retries: 30
       start_period: 10s
     volumes:
-      - ./docker-data/mongo:/data/db
+      - /data/rdrive/mongo:/data/db
     ports:
       - 27017:27017
     networks:
@@ -42,13 +42,21 @@ services:
       - LDAP_BASE_DN=dc=example,dc=org
       - LDAP_USERS_DN=ou=users,dc=example,dc=org
       - LDAP_GROUPS_DN=ou=groups,dc=example,dc=org
+
+      # >>> RCLONE: dit au conteneur où est la conf
+      - RCLONE_CONFIG=/etc/rclone/rclone.conf
     command: node dist/bin/sync_ldap_users.js
     volumes: &backend_volumes
+      # code (inchangé si tu veux continuer en mode dev)
       - ./backend/node/profiles:/usr/src/app/profiles
       - ./backend/node/src:/usr/src/app/src
-      - ./docker-data/files:/tdrive/docker-data/files
+
+      # données tdrive (déportées sous /data)
+      - /data/rdrive/files:/tdrive/docker-data/files
+
+      # rclone binaire + config (sous /data/config/rclone)
       - /usr/bin/rclone:/usr/bin/rclone:ro
-      - /root/.config/rclone:/root/.config/rclone
+      - /data/config/rclone:/etc/rclone:ro
     depends_on: &backend_dependencies
       mongo:
         condition: service_healthy
@@ -63,10 +71,14 @@ services:
     ports:
       - 4000:4000
       - 9229:9229
-    environment: *backend_env_vars
+    environment:
+      <<: *backend_env_vars
+      # >>> RCLONE
+      - RCLONE_CONFIG=/etc/rclone/rclone.conf
     healthcheck:
       test: curl --fail 'http://localhost:4000/diagnostics/t/ready?secret=diag-secret'
-    volumes: *backend_volumes
+    volumes:
+      <<: *backend_volumes
     depends_on:
       <<: *backend_dependencies
       node_create_user:
@@ -98,11 +110,12 @@ services:
       node:
         condition: service_healthy
     volumes:
-      - ./docker-data/logs/nginx/:/var/log/nginx
-      - ./docker-data/letsencrypt/:/etc/letsencrypt/
-      - ./docker-data/drive-preview/:/tdrive-core/web/medias/
-      - ./docker-data/uploads/:/tdrive-core/web/upload/
-      - ./docker-data/ssl:/etc/nginx/ssl
+      # logs & données nginx déportés sous /data
+      - /data/rdrive/logs/nginx:/var/log/nginx
+      - /data/rdrive/letsencrypt:/etc/letsencrypt
+      - /data/rdrive/drive-preview:/tdrive-core/web/medias
+      - /data/rdrive/uploads:/tdrive-core/web/upload
+      - /data/rdrive/ssl:/etc/nginx/ssl
     networks:
       - tdrive_default
       - ldap_my_custom_network
