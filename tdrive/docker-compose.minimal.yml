@@ -42,19 +42,13 @@ services:
       - LDAP_BASE_DN=dc=example,dc=org
       - LDAP_USERS_DN=ou=users,dc=example,dc=org
       - LDAP_GROUPS_DN=ou=groups,dc=example,dc=org
-
-      # >>> RCLONE: dit au conteneur où est la conf
-      - RCLONE_CONFIG=/etc/rclone/rclone.conf
     command: node dist/bin/sync_ldap_users.js
     volumes: &backend_volumes
-      # code (inchangé si tu veux continuer en mode dev)
       - ./backend/node/profiles:/usr/src/app/profiles
       - ./backend/node/src:/usr/src/app/src
       - ./docker-data/files:/tdrive/docker-data/files
-
-      # rclone binaire + config (sous /data/config/rclone)
       - /usr/bin/rclone:/usr/bin/rclone:ro
-      - /data/config/rclone:/etc/rclone:ro
+      - /data/config/rclone:/root/.config/rclone
     depends_on: &backend_dependencies
       mongo:
         condition: service_healthy
@@ -69,14 +63,10 @@ services:
     ports:
       - 4000:4000
       - 9229:9229
-    environment:
-      <<: *backend_env_vars
-      # >>> RCLONE
-      - RCLONE_CONFIG=/etc/rclone/rclone.conf
+    environment: *backend_env_vars
     healthcheck:
       test: curl --fail 'http://localhost:4000/diagnostics/t/ready?secret=diag-secret'
-    volumes:
-      <<: *backend_volumes
+    volumes: *backend_volumes
     depends_on:
       <<: *backend_dependencies
       node_create_user:
