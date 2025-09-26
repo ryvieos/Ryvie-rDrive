@@ -12,7 +12,7 @@ services:
       retries: 30
       start_period: 10s
     volumes:
-      - /data/rdrive/mongo:/data/db
+      - ./docker-data/mongo:/data/db
     ports:
       - 27017:27017
     networks:
@@ -50,9 +50,7 @@ services:
       # code (inchangé si tu veux continuer en mode dev)
       - ./backend/node/profiles:/usr/src/app/profiles
       - ./backend/node/src:/usr/src/app/src
-
-      # données tdrive (déportées sous /data)
-      - /data/rdrive/files:/tdrive/docker-data/files
+      - ./docker-data/files:/tdrive/docker-data/files
 
       # rclone binaire + config (sous /data/config/rclone)
       - /usr/bin/rclone:/usr/bin/rclone:ro
@@ -110,12 +108,11 @@ services:
       node:
         condition: service_healthy
     volumes:
-      # logs & données nginx déportés sous /data
-      - /data/rdrive/logs/nginx:/var/log/nginx
-      - /data/rdrive/letsencrypt:/etc/letsencrypt
-      - /data/rdrive/drive-preview:/tdrive-core/web/medias
-      - /data/rdrive/uploads:/tdrive-core/web/upload
-      - /data/rdrive/ssl:/etc/nginx/ssl
+      - ./docker-data/logs/nginx/:/var/log/nginx
+      - ./docker-data/letsencrypt/:/etc/letsencrypt/
+      - ./docker-data/drive-preview/:/tdrive-core/web/medias/
+      - ./docker-data/uploads/:/tdrive-core/web/upload/
+      - ./docker-data/ssl:/etc/nginx/ssl
     networks:
       - tdrive_default
       - ldap_my_custom_network
