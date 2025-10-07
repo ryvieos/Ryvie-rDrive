@@ -33,7 +33,7 @@ services:
       - PUBSUB_TYPE=local
       - SEARCH_DRIVER=mongodb
       - STORAGE_DRIVER=local
-      - STORAGE_LOCAL_PATH=/tdrive
+      - STORAGE_LOCAL_PATH=/tdrive/docker-data/files
       - ENABLE_FEATURE_ANTIVIRUS=false
       - DIAG_PROBE_SECRET=diag-secret
       - LDAP_URL=ldap://openldap:1389
