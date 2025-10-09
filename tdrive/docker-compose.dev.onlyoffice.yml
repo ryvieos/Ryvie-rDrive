@@ -1,11 +1,10 @@
 version: "3.4"
 
 services:
-
   onlyoffice-rabbitmq:
     image: rabbitmq:management
-    hostname: onlyoffice-rabbitmq
     container_name: app-rdrive-rabbitmq
+    hostname: onlyoffice-rabbitmq
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
@@ -13,34 +12,34 @@ services:
       - "5672:5672"
       - "15672:15672"
     volumes:
-      - ./.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
-      - ./.docker-conf/rabbitmq/log/:/var/log/rabbitmq
+      - ./docker-data/rabbitmq/data:/var/lib/rabbitmq
+      - ./docker-data/rabbitmq/log:/var/log/rabbitmq
     networks:
       - tdrive_network
+    restart: unless-stopped
 
   onlyoffice-postgresql:
     image: postgres:13
-    hostname: onlyoffice-postgresql
     container_name: app-rdrive-postgresql
+    hostname: onlyoffice-postgresql
     environment:
       - POSTGRES_DB=onlyoffice
       - POSTGRES_USER=onlyoffice
       - POSTGRES_PASSWORD=onlyoffice
     ports:
-      - 5433:5432
+      - "5433:5432"
     volumes:
-      - ./onlyoffice_postgres_data:/var/lib/postgresql/data
+      - ./docker-data/onlyoffice-postgres:/var/lib/postgresql/data
     networks:
       - tdrive_network
+    restart: unless-stopped
 
   onlyoffice:
-    image: docker.io/onlyoffice/documentserver
-    hostname: onlyoffice
+    image: onlyoffice/documentserver
     container_name: app-rdrive-onlyoffice
+    hostname: onlyoffice
     ports:
-      - 8090:80
-    networks:
-      - tdrive_network
+      - "8090:80"
     environment:
       - AMQP_URI=amqp://guest:guest@onlyoffice-rabbitmq
       - DB_HOST=onlyoffice-postgresql
@@ -55,9 +54,12 @@ services:
       - onlyoffice-rabbitmq
       - onlyoffice-postgresql
     volumes:
-      - ./onlyoffice_data:/var/www/onlyoffice/Data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - ./docker-data/onlyoffice/Data:/var/www/onlyoffice/Data
+      - ./docker-data/onlyoffice/lib:/var/lib/onlyoffice
+      - ./docker-data/onlyoffice/log:/var/log/onlyoffice
+    networks:
+      - tdrive_network
+    restart: unless-stopped
 
 networks:
   tdrive_network:
