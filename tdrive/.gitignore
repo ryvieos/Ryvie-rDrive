@@ -116,13 +116,17 @@ docker-compose.yml
 ### AWS ###
 /app/config/aws_config.yml
 
-### Test ###
 /tests/code_coverage/
 /web/detached/*
 /drive/*
 /configuration
 
-### Only Office ###
-/onlyoffice_data/
-/onlyoffice_postgres_data/
-/.docker-conf/
+  ### Only Office ###
+  /onlyoffice_data/
+  /onlyoffice_postgres_data/
+  /.docker-conf/
+
+  # Environment files
+  .env
+  .env.*
+  !.env.example
