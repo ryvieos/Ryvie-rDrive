@@ -1,0 +1,228 @@
+version: "3.4"
+
+services:
+  # ==========================================
+  # OnlyOffice Stack
+  # ==========================================
+  onlyoffice-rabbitmq:
+    image: rabbitmq:management
+    container_name: app-rdrive-rabbitmq
+    hostname: onlyoffice-rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./docker-data/rabbitmq/data:/var/lib/rabbitmq
+      - ./docker-data/rabbitmq/log:/var/log/rabbitmq
+    networks:
+      - tdrive_network
+      - tdrive_default
+    restart: unless-stopped
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  onlyoffice-postgresql:
+    image: postgres:13
+    container_name: app-rdrive-postgresql
+    hostname: onlyoffice-postgresql
+    environment:
+      - POSTGRES_DB=onlyoffice
+      - POSTGRES_USER=onlyoffice
+      - POSTGRES_PASSWORD=onlyoffice
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./docker-data/onlyoffice-postgres:/var/lib/postgresql/data
+    networks:
+      - tdrive_network
+      - tdrive_default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onlyoffice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  onlyoffice:
+    image: onlyoffice/documentserver
+    container_name: app-rdrive-onlyoffice
+    hostname: onlyoffice
+    ports:
+      - "8090:80"
+    environment:
+      - AMQP_URI=amqp://guest:guest@onlyoffice-rabbitmq
+      - DB_HOST=onlyoffice-postgresql
+      - DB_NAME=onlyoffice
+      - DB_PORT=5432
+      - DB_TYPE=postgres
+      - DB_USER=onlyoffice
+      - JWT_ENABLED=false
+      - ALLOW_META_IP_ADDRESS=true
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+    depends_on:
+      onlyoffice-rabbitmq:
+        condition: service_healthy
+      onlyoffice-postgresql:
+        condition: service_healthy
+    volumes:
+      - ./docker-data/onlyoffice/Data:/var/www/onlyoffice/Data
+      - ./docker-data/onlyoffice/lib:/var/lib/onlyoffice
+      - ./docker-data/onlyoffice/log:/var/log/onlyoffice
+    networks:
+      - tdrive_network
+      - tdrive_default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  onlyoffice-connector:
+    container_name: app-rdrive-onlyoffice-connector
+    image: twakedrive/onlyoffice-connector:latest
+    environment:
+      - SERVER_PORT=5000
+      - SERVER_PREFIX=/plugins/onlyoffice/
+      - SERVER_ORIGIN=${REACT_APP_ONLYOFFICE_CONNECTOR_URL}
+      - CREDENTIALS_ENDPOINT=${REACT_APP_BACKEND_URL}/
+      - ONLY_OFFICE_SERVER=${REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL}/
+      - CREDENTIALS_ID=tdrive_onlyoffice
+      - CREDENTIALS_SECRET=c1cc66db78e1d3bb4713c55d5ab2
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      onlyoffice:
+        condition: service_healthy
+
+  # ==========================================
+  # rDrive Core Stack
+  # ==========================================
+  mongo:
+    container_name: app-rdrive-mongo
+    restart: unless-stopped
+    image: mongo
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 2m
+      retries: 30
+      start_period: 10s
+    volumes:
+      - ./docker-data/mongo:/data/db
+    ports:
+      - 27017:27017
+    networks:
+      - tdrive_default
+      - ldap_my_custom_network
+
+  node_create_user:
+    container_name: app-rdrive-node-create-user
+    build: &backend_docker_build
+      context: .
+      dockerfile: docker/tdrive-node/Dockerfile
+      target: production
+    environment: &backend_env_vars
+      - DEV=dev
+      - ACCOUNTS_TYPE=internal
+      - DB_DRIVER=mongodb
+      - DB_MONGO_URI=mongodb://mongo:27017
+      - PUBSUB_TYPE=local
+      - SEARCH_DRIVER=mongodb
+      - STORAGE_DRIVER=local
+      - STORAGE_LOCAL_PATH=/tdrive/docker-data/files
+      - ENABLE_FEATURE_ANTIVIRUS=false
+      - DIAG_PROBE_SECRET=diag-secret
+      - LDAP_URL=ldap://openldap:1389
+      - LDAP_BIND_DN=cn=admin,dc=example,dc=org
+      - LDAP_BIND_PASSWORD=adminpassword
+      - LDAP_BASE_DN=dc=example,dc=org
+      - LDAP_USERS_DN=ou=users,dc=example,dc=org
+      - LDAP_GROUPS_DN=ou=groups,dc=example,dc=org
+    command: node dist/bin/sync_ldap_users.js
+    volumes: &backend_volumes
+      - ./backend/node/profiles:/usr/src/app/profiles
+      - ./backend/node/src:/usr/src/app/src
+      - ./docker-data/files:/tdrive/docker-data/files
+      - /usr/bin/rclone:/usr/bin/rclone:ro
+      - /data/config/rclone:/root/.config/rclone
+    depends_on: &backend_dependencies
+      mongo:
+        condition: service_healthy
+      onlyoffice:
+        condition: service_healthy
+    networks:
+      - tdrive_default
+      - ldap_my_custom_network
+
+  node:
+    container_name: app-rdrive-node
+    restart: unless-stopped
+    build: *backend_docker_build
+    ports:
+      - 4000:4000
+      - 9229:9229
+    environment: *backend_env_vars
+    healthcheck:
+      test: curl --fail 'http://localhost:4000/diagnostics/t/ready?secret=diag-secret'
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    volumes: *backend_volumes
+    depends_on:
+      <<: *backend_dependencies
+      node_create_user:
+        condition: service_completed_successfully
+    networks:
+      - tdrive_default
+      - ldap_my_custom_network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/tdrive-frontend/Dockerfile
+      args:
+        REACT_APP_FRONTEND_URL: ${REACT_APP_FRONTEND_URL}
+        REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL}
+        REACT_APP_WEBSOCKET_URL: ${REACT_APP_WEBSOCKET_URL}
+        REACT_APP_ONLYOFFICE_CONNECTOR_URL: ${REACT_APP_ONLYOFFICE_CONNECTOR_URL}
+        REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL: ${REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL}
+    container_name: app-rdrive-frontend
+    environment:
+      - DEV=production
+      - SSL_CERTS=off
+      - NODE_HOST=http://node:4000
+    ports:
+      - 3010:80
+      - 8443:443
+    restart: unless-stopped
+    depends_on:
+      node:
+        condition: service_healthy
+    volumes:
+      - ./docker-data/logs/nginx/:/var/log/nginx
+      - ./docker-data/letsencrypt/:/etc/letsencrypt/
+      - ./docker-data/drive-preview/:/tdrive-core/web/medias/
+      - ./docker-data/uploads/:/tdrive-core/web/upload/
+      - ./docker-data/ssl:/etc/nginx/ssl
+    networks:
+      - tdrive_default
+      - ldap_my_custom_network
+
+networks:
+  tdrive_default:
+    name: tdrive_default
+  tdrive_network:
+    driver: bridge
+  ldap_my_custom_network:
+    external: true
