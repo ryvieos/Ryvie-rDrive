@@ -29,7 +29,6 @@
         url: `${window.baseURL}read${callbackQueryString}`,
         fileType: "<%= it.file_type %>",
         key: "<%= it.docId %>",
-        token: "<%= it.drive_file_id %>",
         permissions: {
           download: true,
           edit: <%= it.editable %>,
@@ -48,7 +47,6 @@
         height: '100%',
         documentType: window.mode,
         document: doc,
-        token: "<%= it.drive_file_id %>",
         type: screen.width < 600 ? 'mobile' : 'desktop',
         events: {
           onRequestRename: function (event) {
