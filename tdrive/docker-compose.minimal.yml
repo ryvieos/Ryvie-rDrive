@@ -21,6 +21,7 @@ services:
 
   node_create_user:
     container_name: app-rdrive-node-create-user
+    restart: unless-stopped
     build: &backend_docker_build
       context: .
       dockerfile: docker/tdrive-node/Dockerfile
