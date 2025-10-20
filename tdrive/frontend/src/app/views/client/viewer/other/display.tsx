@@ -1,15 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useEditors } from './editors-service';
+import { useCompanyApplications } from '@features/applications/hooks/use-company-applications';
 
 export default (props: { download: string; name: string; id: string }) => {
   const extension = props.name.split('.').pop();
+  const { refresh } = useCompanyApplications();
   const { getPreviewUrl } = useEditors(extension || '');
   const [previewUrl, setPreviewUrl] = useState('');
+
+  useEffect(() => {
+    // Force refresh applications when component mounts
+    console.log('[display] Rafraîchissement des applications au montage du composant');
+    refresh();
+  }, []);
 
   useEffect(() => {
     // Recompute preview URL whenever the file id or editors config changes
     setPreviewUrl(getPreviewUrl(props.id) || '');
   }, [props.id, getPreviewUrl]);
+  
+  console.log("previewUrl", previewUrl, "props.id", props.id);
 
   if (!(props.id && previewUrl)) {
     return (
