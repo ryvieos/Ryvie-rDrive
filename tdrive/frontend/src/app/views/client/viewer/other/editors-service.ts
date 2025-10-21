@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { useMemo } from 'react';
 import { useCompanyApplications } from '@features/applications/hooks/use-company-applications';
 import { Application } from '@features/applications/types/application';
 import jwtStorageService from '@features/auth/jwt-storage-service';
@@ -20,14 +21,20 @@ export const useEditors = (
   const workspaceId = useRouterWorkspace();
   const companyId = useRouterCompany();
   const { applications } = useCompanyApplications();
-  const apps = applications.filter(
-    app =>
-      app.display?.tdrive?.files?.editor?.preview_url ||
-      app.display?.tdrive?.files?.editor?.edition_url,
-  );
+  
+  const { preview_candidate, editor_candidate } = useMemo(() => {
+    console.log('[useEditors] Recalcul des candidats - applications:', applications.length);
+    
+    const apps = applications.filter(
+      app =>
+        app.display?.tdrive?.files?.editor?.preview_url ||
+        app.display?.tdrive?.files?.editor?.edition_url,
+    );
 
-  const preview_candidate: EditorType[] = [];
-  const editor_candidate: EditorType[] = [];
+    console.log('[useEditors] Apps filtrées pour OnlyOffice:', apps.length);
+
+    const preview_candidate: EditorType[] = [];
+    const editor_candidate: EditorType[] = [];
 
   if (options?.preview_url) {
     preview_candidate.push({
@@ -42,24 +49,30 @@ export const useEditors = (
     });
   }
 
-  //Primary exts
-  apps.forEach(app => {
-    if (
-      (app.display?.tdrive?.files?.editor?.extensions || []).indexOf(
-        ((extension || '') + (options?.url ? '.url' : '')).toLocaleLowerCase(),
-      ) >= 0
-    ) {
-      if (app.display?.tdrive?.files?.editor?.edition_url) {
-        editor_candidate.push({ app });
+    //Primary exts
+    apps.forEach(app => {
+      if (
+        (app.display?.tdrive?.files?.editor?.extensions || []).indexOf(
+          ((extension || '') + (options?.url ? '.url' : '')).toLocaleLowerCase(),
+        ) >= 0
+      ) {
+        if (app.display?.tdrive?.files?.editor?.edition_url) {
+          editor_candidate.push({ app });
+        }
+        if (app.display?.tdrive?.files?.editor?.preview_url) {
+          preview_candidate.push({
+            url: app.display?.tdrive?.files?.editor?.preview_url,
+            app: app,
+          });
+        }
       }
-      if (app.display?.tdrive?.files?.editor?.preview_url) {
-        preview_candidate.push({
-          url: app.display?.tdrive?.files?.editor?.preview_url,
-          app: app,
-        });
-      }
-    }
-  });
+    });
+
+    console.log('[useEditors] preview_candidate:', preview_candidate.length, preview_candidate);
+    console.log('[useEditors] editor_candidate:', editor_candidate.length);
+    
+    return { preview_candidate, editor_candidate };
+  }, [applications, extension, options]);
 
   const openFile = (app: any, fileId: string, driveId: string) => {
     if (app.url && app.is_url_file) {
@@ -71,7 +84,9 @@ export const useEditors = (
   };
 
   const getPreviewUrl = (fileId: string): string => {
-    return getFileUrl(preview_candidate?.[0]?.url as string, fileId);
+    const baseUrl = preview_candidate?.[0]?.url as string;
+    console.log('[getPreviewUrl] fileId:', fileId, 'baseUrl:', baseUrl, 'preview_candidate:', preview_candidate.length);
+    return getFileUrl(baseUrl, fileId);
   };
 
   const getFileUrl = (url: string, file_id: string, drive_id?: string): string => {

@@ -20,6 +20,7 @@ import FeatureTogglesService, {
 import Logger from '@features/global/framework/logger-service';
 import jwtStorageService from '@features/auth/jwt-storage-service';
 import { useCloudFiles } from './use-cloud-files';
+import FileDownloadService from '@features/files/services/file-download-service';
 
 /**
  * Returns the children of a drive item
@@ -42,17 +43,18 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
    */
   const downloadFile = (fileUrl: string, fileName?: string) => {
     try {
-      // Afficher une notification que le téléchargement est en préparation
-      const messageText = fileName 
-        ? Languages.t('hooks.use-drive-actions.preparing_file_with_name', [fileName]) 
-        : Languages.t('hooks.use-drive-actions.preparing_file');
+      // Générer un ID unique pour ce téléchargement
+      const downloadId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // Utiliser message.loading qui retourne une fonction pour fermer le message
-      const hideLoading = ToasterService.loading(messageText, 0);
+      // Extraire le nom du fichier si non fourni
+      const finalFileName = fileName || fileUrl.split('/').pop()?.split('?')[0] || 'download';
       
       // Récupérer le JWT et créer l'en-tête d'autorisation
       const jwt = jwtStorageService.getJWT();
       const authHeader = `Bearer ${jwt}`;
+      
+      // Créer un AbortController pour permettre l'annulation
+      const abortController = new AbortController();
 
       // Utiliser fetch avec les en-têtes d'authentification et les cookies
       fetch(fileUrl, {
@@ -61,16 +63,15 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
         headers: {
           Authorization: authHeader,
         },
+        signal: abortController.signal,
       })
-        .then(response => {
+        .then(async response => {
           if (!response.ok) {
-            // Fermer la notification en cas d'erreur
-            hideLoading();
             throw new Error(`Erreur HTTP: ${response.status}`);
           }
           
           // Extraire le nom du fichier de l'en-tête Content-Disposition s'il existe
-          let extractedFileName = fileName;
+          let extractedFileName = finalFileName;
           const contentDisposition = response.headers.get('Content-Disposition');
           if (contentDisposition) {
             const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
@@ -79,19 +80,40 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
             }
           }
           
-          // Utiliser le nom fourni, extrait ou généré à partir de l'URL
-          if (!extractedFileName) {
-            extractedFileName = fileUrl.split('/').pop()?.split('?')[0] || 'download';
+          // Obtenir la taille du fichier
+          const contentLength = response.headers.get('Content-Length');
+          const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+          
+          // Ajouter le téléchargement au service
+          FileDownloadService.addDownload(downloadId, extractedFileName, totalSize, fileUrl, abortController);
+          
+          // Lire le flux de réponse avec suivi de progression
+          const reader = response.body?.getReader();
+          const chunks: Uint8Array[] = [];
+          let receivedLength = 0;
+          
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              
+              if (done) break;
+              
+              chunks.push(value);
+              receivedLength += value.length;
+              
+              // Mettre à jour la progression
+              FileDownloadService.updateProgress(downloadId, receivedLength);
+            }
           }
           
-          return response.blob().then(blob => ({ blob, fileName: extractedFileName }));
+          // Créer le blob à partir des chunks
+          const blob = new Blob(chunks);
+          return { blob, fileName: extractedFileName };
         })
         .then(({ blob, fileName }) => {
           const url = window.URL.createObjectURL(blob);
           const downloadLink = document.createElement('a');
           downloadLink.href = url;
-          
-          // Utiliser le nom du fichier correct (avec valeur par défaut pour éviter undefined)
           downloadLink.download = fileName || 'download';
           
           document.body.appendChild(downloadLink);
@@ -99,19 +121,17 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
           document.body.removeChild(downloadLink);
           window.URL.revokeObjectURL(url);
           
-          // Fermer la notification de préparation et afficher une notification de succès
-          hideLoading();
-          ToasterService.success(
-            fileName 
-              ? Languages.t('hooks.use-drive-actions.download_complete_with_name', [fileName])
-              : Languages.t('hooks.use-drive-actions.download_complete')
-          );
+          // Marquer le téléchargement comme terminé
+          FileDownloadService.completeDownload(downloadId);
         })
         .catch(error => {
-          // Fermer la notification en cas d'erreur
-          hideLoading();
-          Logger.error('Erreur lors du téléchargement:', error);
-          ToasterService.error(Languages.t('hooks.use-drive-actions.unable_download_file'));
+          if (error.name === 'AbortError') {
+            Logger.info('Téléchargement annulé par l\'utilisateur');
+          } else {
+            Logger.error('Erreur lors du téléchargement:', error);
+            FileDownloadService.failDownload(downloadId);
+            ToasterService.error(Languages.t('hooks.use-drive-actions.unable_download_file'));
+          }
         });
     } catch (e) {
       ToasterService.error(Languages.t('hooks.use-drive-actions.unable_download_file'));
@@ -292,9 +312,8 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
           Logger.debug('Lancement du téléchargement ZIP');
           
           // Déterminer un nom de fichier approprié pour le ZIP
-          let zipFileName = 'archive.zip';
-          let displayName = 'archive';
-          let hideLoading: () => void = () => {};
+          let zipFileName = 'rDrive.zip';
+          let displayName = 'rDrive';
           
           if (ids.length === 1) {
             // Si c'est un seul dossier/fichier, on utilise son nom
@@ -309,70 +328,92 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
               Logger.error('Erreur lors de la récupération des détails du dossier:', e);
             }
           } else if (ids.length > 1) {
-            displayName = Languages.t('hooks.use-drive-actions.multiple_files', [ids.length]);
+            // Pour plusieurs fichiers, utiliser "rDrive" comme nom
+            displayName = 'rDrive';
+            zipFileName = 'rDrive.zip';
           }
-          
-          // Afficher une notification de préparation du téléchargement
-          const messageText = isDirectory 
-            ? Languages.t('hooks.use-drive-actions.preparing_folder_with_name', [displayName]) 
-            : Languages.t('hooks.use-drive-actions.preparing_files_with_count', [ids.length]);
-          
-          hideLoading = ToasterService.loading(messageText, 0);
           
           Logger.debug('Téléchargement du ZIP avec nom:', zipFileName);
           
           // Obtenir l'URL de téléchargement
           const url = await DriveApiClient.getDownloadZipUrl(companyId, ids, isDirectory);
           
-          // Télécharger le ZIP avec le nom approprié (sans notifications car on les gère ici)
-          try {
-            // Récupérer le JWT et créer l'en-tête d'autorisation
-            const jwt = jwtStorageService.getJWT();
-            const authHeader = `Bearer ${jwt}`;
+          // Générer un ID unique pour ce téléchargement
+          const downloadId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          // Récupérer le JWT et créer l'en-tête d'autorisation
+          const jwt = jwtStorageService.getJWT();
+          const authHeader = `Bearer ${jwt}`;
+          
+          // Créer un AbortController pour permettre l'annulation
+          const abortController = new AbortController();
 
-            // Utiliser fetch avec les en-têtes d'authentification et les cookies
-            fetch(url, {
-              method: 'GET',
-              credentials: 'include',
-              headers: {
-                Authorization: authHeader,
-              },
-            })
-              .then(response => {
-                if (!response.ok) {
-                  hideLoading();
-                  throw new Error(`Erreur HTTP: ${response.status}`);
+          // Utiliser fetch avec les en-têtes d'authentification et les cookies
+          fetch(url, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              Authorization: authHeader,
+            },
+            signal: abortController.signal,
+          })
+            .then(async response => {
+              if (!response.ok) {
+                throw new Error(`Erreur HTTP: ${response.status}`);
+              }
+              
+              // Obtenir la taille du fichier
+              const contentLength = response.headers.get('Content-Length');
+              const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+              
+              // Ajouter le téléchargement au service
+              FileDownloadService.addDownload(downloadId, zipFileName, totalSize, url, abortController);
+              
+              // Lire le flux de réponse avec suivi de progression
+              const reader = response.body?.getReader();
+              const chunks: Uint8Array[] = [];
+              let receivedLength = 0;
+              
+              if (reader) {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  
+                  if (done) break;
+                  
+                  chunks.push(value);
+                  receivedLength += value.length;
+                  
+                  // Mettre à jour la progression
+                  FileDownloadService.updateProgress(downloadId, receivedLength);
                 }
-                return response.blob();
-              })
-              .then(blob => {
-                const objectUrl = window.URL.createObjectURL(blob);
-                const downloadLink = document.createElement('a');
-                downloadLink.href = objectUrl;
-                downloadLink.download = zipFileName;
-                document.body.appendChild(downloadLink);
-                downloadLink.click();
-                document.body.removeChild(downloadLink);
-                window.URL.revokeObjectURL(objectUrl);
-                
-                // Fermer la notification de préparation et afficher une notification de succès
-                hideLoading();
-                ToasterService.success(
-                  isDirectory 
-                    ? Languages.t('hooks.use-drive-actions.download_folder_complete', [displayName])
-                    : Languages.t('hooks.use-drive-actions.download_files_complete', [ids.length])
-                );
-              })
-              .catch(error => {
-                hideLoading();
+              }
+              
+              // Créer le blob à partir des chunks
+              const blob = new Blob(chunks);
+              return blob;
+            })
+            .then(blob => {
+              const objectUrl = window.URL.createObjectURL(blob);
+              const downloadLink = document.createElement('a');
+              downloadLink.href = objectUrl;
+              downloadLink.download = zipFileName;
+              document.body.appendChild(downloadLink);
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+              window.URL.revokeObjectURL(objectUrl);
+              
+              // Marquer le téléchargement comme terminé
+              FileDownloadService.completeDownload(downloadId);
+            })
+            .catch(error => {
+              if (error.name === 'AbortError') {
+                Logger.info('Téléchargement ZIP annulé par l\'utilisateur');
+              } else {
                 Logger.error('Erreur lors du téléchargement ZIP:', error);
+                FileDownloadService.failDownload(downloadId);
                 ToasterService.error(Languages.t('hooks.use-drive-actions.unable_download_file'));
-              });
-          } catch (e) {
-            hideLoading();
-            Logger.error('Erreur lors du téléchargement ZIP:', e);
-            ToasterService.error(Languages.t('hooks.use-drive-actions.unable_download_file'));
-          }
+              }
+            });
         };
         if (AVEnabled) {
           const containsMaliciousFiles =
