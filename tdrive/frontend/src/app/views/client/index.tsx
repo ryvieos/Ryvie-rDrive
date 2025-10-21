@@ -3,6 +3,7 @@ import classNames from 'classnames';
 import React, { Suspense, useState } from 'react';
 
 import UploadsViewer from '@components/file-uploads/uploads-viewer';
+import DownloadsViewer from '@components/file-downloads/downloads-viewer';
 import { useFeatureToggles } from '@components/locked-features-components/feature-toggles-hooks';
 import MenusBodyLayer from '@components/menus/menus-body-layer.jsx';
 import ModalComponent from '@components/modal/modal-component';
@@ -97,6 +98,7 @@ export default React.memo((): JSX.Element => {
       <SearchPopup />
       <ConnectionIndicator />
       <UploadsViewer />
+      <DownloadsViewer />
     </>
   );
 });

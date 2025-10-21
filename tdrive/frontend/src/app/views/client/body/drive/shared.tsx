@@ -11,6 +11,7 @@ import { Button } from 'app/atoms/button/button';
 import { Input } from 'app/atoms/input/input-text';
 import { Base, Subtitle, Title } from 'app/atoms/text';
 import UploadsViewer from 'app/components/file-uploads/uploads-viewer';
+import DownloadsViewer from 'app/components/file-downloads/downloads-viewer';
 import { useDriveItem } from 'app/features/drive/hooks/use-drive-item';
 import { ToasterService } from 'app/features/global/services/toaster-service';
 import { useParams } from 'react-router-dom';
@@ -83,6 +84,7 @@ export default () => {
           </div>
           <MenusBodyLayer />
           <UploadsViewer />
+          <DownloadsViewer />
           <CreateModalWithUploadZones initialParentId={documentId} />
         </div>
       </>
