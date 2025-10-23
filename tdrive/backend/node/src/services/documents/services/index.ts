@@ -1348,7 +1348,16 @@ export class DocumentsService {
         logger.debug(`Begin edit try ${newKey}, got: ${JSON.stringify(swapResult)}`);
         if (swapResult.didSet) return newKey;
         if (!swapResult.currentValue) continue; // glitch in the matrix but ok because atomicCompareAndSet is not actually completely atomic
-        const existingStatus = await provider.getPluginKeyStatus(swapResult.currentValue);
+        let existingStatus: ApplicationEditingKeyStatus;
+        try {
+          existingStatus = await provider.getPluginKeyStatus(swapResult.currentValue);
+        } catch (error) {
+          logger.warn(
+            { error: `${error}` },
+            `Begin edit reusing existing session ${swapResult.currentValue} after status check failure`,
+          );
+          return swapResult.currentValue;
+        }
         logger.debug(`Begin edit get status of ${newKey}: ${JSON.stringify(existingStatus)}`);
         switch (existingStatus) {
           case ApplicationEditingKeyStatus.unknown:
