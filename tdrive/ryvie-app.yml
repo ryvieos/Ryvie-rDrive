@@ -1,0 +1,7 @@
+manifestVersion: 1
+id: rdrive
+category: storage
+name: rDrive
+version: "0.0.1"
+port: 3010
+
