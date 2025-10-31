@@ -135,7 +135,7 @@
     "clamscan": "^2.4.0",
     "class-transformer": "^0.3.1",
     "cli-table": "^0.3.6",
-    "config": "^3.3.2",
+    "config": "^3.3.12",
     "cozy-client": "^57.7.0",
     "cozy-device-helper": "^3.8.0",
     "cozy-flags": "^4.7.0",

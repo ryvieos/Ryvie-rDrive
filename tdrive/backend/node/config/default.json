@@ -123,6 +123,7 @@
     "debug": true
   },
   "drive": {
+    "defaultLanguage": "fr",
     "featureSharedDrive": true,
     "featureDisplayEmail": true,
     "featureUserQuota": false,
