@@ -1132,9 +1132,16 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
               <div class="redirect">Redirecting to rdrive...</div>
             </div>
             <script>
-              // Redirection automatique après 2 secondes
+              // Redirection automatique après 2 secondes avec rechargement forcé
               setTimeout(() => {
-                window.location.href = '${redirectUrl}';
+                // Forcer un rechargement complet avec vidage du cache
+                // Ajouter un timestamp pour forcer le reload
+                const url = '${redirectUrl}' + (('${redirectUrl}'.includes('?')) ? '&' : '?') + '_reload=' + Date.now();
+                window.location.href = url;
+                // Alternative: forcer un hard reload si supporté
+                if (window.location.reload) {
+                  setTimeout(() => window.location.reload(true), 100);
+                }
               }, 2000);
             </script>
           </body>
@@ -1926,9 +1933,16 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
               <div class="redirect">Redirecting to rdrive...</div>
             </div>
             <script>
-              // Redirection automatique après 2 secondes
+              // Redirection automatique après 2 secondes avec rechargement forcé
               setTimeout(() => {
-                window.location.href = '${redirectUrl}';
+                // Forcer un rechargement complet avec vidage du cache
+                // Ajouter un timestamp pour forcer le reload
+                const url = '${redirectUrl}' + (('${redirectUrl}'.includes('?')) ? '&' : '?') + '_reload=' + Date.now();
+                window.location.href = url;
+                // Alternative: forcer un hard reload si supporté
+                if (window.location.reload) {
+                  setTimeout(() => window.location.reload(true), 100);
+                }
               }, 2000);
             </script>
           </body>

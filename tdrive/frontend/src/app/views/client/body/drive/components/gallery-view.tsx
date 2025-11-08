@@ -19,9 +19,13 @@ const GalleryThumbnail: React.FC<{ item: DriveItem }> = ({ item }) => {
   const isVideo = !!meta?.mime && meta.mime.startsWith('video/');
   const likelyImageByExt = /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/i.test(name);
   const likelyVideoByExt = /\.(mp4|mov|webm|avi|mkv|m4v)$/i.test(name);
+  
+  // Désactiver la prévisualisation pour Dropbox et Google Drive
+  const isCloudProvider = meta?.source === 'dropbox' || meta?.source === 'googledrive';
 
   const thumb = meta?.thumbnails?.[0];
   let initialThumbUrl: string | undefined = thumb?.full_url || thumb?.url;
+  // Ne charger les thumbnails que pour les fichiers internes (pas Dropbox/Google Drive)
   if (!initialThumbUrl && meta?.source === 'internal' && typeof meta?.external_id === 'string' && typeof thumb?.index !== 'undefined') {
     const base = fileUploadApiClient.getRoute({ companyId: (item as any).company_id, fileId: meta.external_id, fullApiRouteUrl: true });
     initialThumbUrl = `${base}/thumbnails/${thumb.index}`;
@@ -35,18 +39,24 @@ const GalleryThumbnail: React.FC<{ item: DriveItem }> = ({ item }) => {
   ) {
     initialThumbUrl = fileUploadApiClient.getDownloadRoute({ companyId: (item as any).company_id, fileId: meta.external_id });
   }
+  
+  // Si c'est un fichier cloud provider, ne pas utiliser de thumbnail
+  if (isCloudProvider) {
+    initialThumbUrl = undefined;
+  }
 
   const [errored, setErrored] = useState(false);
   const thumbUrl = !errored ? initialThumbUrl : undefined;
   const looksLikeImage = !isDir && (isImage || likelyImageByExt);
-  const [isLoading, setIsLoading] = useState(true);
+  // Ne pas afficher le spinner de chargement pour les fichiers cloud
+  const [isLoading, setIsLoading] = useState(!isCloudProvider);
 
   // If we don't have any preview URL for an image-like file (e.g., Dropbox/Google Drive without thumbnails),
   // show a short skeleton, then display a violet photo icon.
   React.useEffect(() => {
-    // Reset loading state when item changes
-    setIsLoading(true);
-  }, [(item as any)?.id]);
+    // Reset loading state when item changes (sauf pour les cloud providers)
+    setIsLoading(!isCloudProvider);
+  }, [(item as any)?.id, isCloudProvider]);
 
   return (
     <div className="aspect-square w-full overflow-hidden rounded-t-lg bg-zinc-50 flex items-center justify-center">
@@ -166,9 +176,8 @@ export const GalleryView: React.FC<GalleryViewProps> = memo(
                       <div className="font-medium text-zinc-800 break-words" title={item.name}>
                         {clamp(item.name, 40)}
                       </div>
-                      {!isDir && (
-                        <div className="text-[11px] text-zinc-500">{formatBytes(item.size || 0)}</div>
-                      )}
+                      {/* Afficher la taille pour les fichiers ET les dossiers */}
+                      <div className="text-[11px] text-zinc-500">{formatBytes(item.size || 0)}</div>
                     </div>
                     <div className="shrink-0 flex items-center gap-1">
                       {hasSharedDriveAccess(item as any) && (

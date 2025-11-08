@@ -7,6 +7,7 @@ import UploadZone from '@components/uploads/upload-zone';
 import { setTdriveTabToken } from '@features/drive/api-client/api-client';
 import { useDriveItem } from '@features/drive/hooks/use-drive-item';
 import { useDriveUpload } from '@features/drive/hooks/use-drive-upload';
+import { useDrivePrefetch } from '@features/drive/hooks/use-drive-prefetch';
 import { DriveItemSelectedList, DriveItemSort, DriveNavigationState } from '@features/drive/state/store';
 import { formatBytes } from '@features/drive/utils';
 import useRouterCompany from '@features/router/hooks/use-router-company';
@@ -121,6 +122,9 @@ export default memo(
     } = useDriveItem(parentId);
     const { uploadTree } = useDriveUpload();
     const { uploadTree: _uploadTree } = useUploadExp();
+    
+    // Activer le préchargement et la mise en cache pour une navigation fluide
+    useDrivePrefetch();
 
     // Chargement optimisé : navigation instantanée + chargement des données
     const loading = loadingParent || loadingParentChange;
@@ -130,14 +134,28 @@ export default memo(
     const memoizedItems = useMemo(() => children || [], [children]);
     const itemsCount = memoizedItems.length;
     
-    // Virtualisation légère pour les grandes listes
-    const VIRT_PAGE_SIZE = 200;
+    // Virtualisation légère pour les grandes listes - CHARGEMENT PROGRESSIF
+    const VIRT_PAGE_SIZE = 50; // Réduire pour afficher plus rapidement
     const VIRT_THRESHOLD = 100; // déclenchement de chargement quand on s'approche du bas
     const shouldVirtualize = itemsCount > VIRT_PAGE_SIZE;
     const [visibleRange, setVisibleRange] = useState({
       start: 0,
       end: shouldVirtualize ? Math.min(VIRT_PAGE_SIZE, itemsCount) : itemsCount,
     });
+    
+    // Chargement progressif automatique des items suivants
+    useEffect(() => {
+      if (shouldVirtualize && visibleRange.end < itemsCount) {
+        // Charger automatiquement les items suivants après un court délai
+        const timer = setTimeout(() => {
+          setVisibleRange(v => ({
+            start: 0,
+            end: Math.min(v.end + VIRT_PAGE_SIZE, itemsCount)
+          }));
+        }, 100); // Délai de 100ms entre chaque batch
+        return () => clearTimeout(timer);
+      }
+    }, [visibleRange.end, itemsCount, shouldVirtualize]);
     
     // Réinitialiser la fenêtre visible lors d'un changement d'items
     useEffect(() => {
@@ -878,14 +896,21 @@ export default memo(
                     </>
                   )}
                   {shouldVirtualize && visibleRange.end < itemsCount && (
-                    <div className="flex justify-center py-4">
+                    <div className="flex flex-col items-center py-4 gap-2">
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <svg className="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Chargement progressif... ({visibleRange.end}/{itemsCount})</span>
+                      </div>
                       <Button
                         theme="secondary"
                         onClick={() =>
-                          setVisibleRange((v: { start: number; end: number }) => ({ start: 0, end: Math.min(v.end + VIRT_PAGE_SIZE, itemsCount) }))
+                          setVisibleRange((v: { start: number; end: number }) => ({ start: 0, end: itemsCount }))
                         }
                       >
-                        Charger plus ({visibleRange.end}/{itemsCount})
+                        Tout charger maintenant
                       </Button>
                     </div>
                   )}

@@ -9,11 +9,12 @@ export const formatBytes = (bytes: number, decimals = 2) => {
     return (bytes as any).display_size;
   }
   
-  if (!+bytes) return '0 KB';
+  if (!+bytes) return '0 Ko';
 
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  // Utiliser les unités en français: octets (o), Ko, Mo, Go, etc.
+  const sizes = ['o', 'Ko', 'Mo', 'Go', 'To', 'Po', 'Eo', 'Zo', 'Yo'];
 
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
@@ -21,11 +22,12 @@ export const formatBytes = (bytes: number, decimals = 2) => {
 };
 
 export const formatBytesToInt = (bytes: number, decimals = 2) => {
-  if (!+bytes) return '0 KB';
+  if (!+bytes) return '0 Ko';
 
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  // Utiliser les unités en français: octets (o), Ko, Mo, Go, etc.
+  const sizes = ['o', 'Ko', 'Mo', 'Go', 'To', 'Po', 'Eo', 'Zo', 'Yo'];
 
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
