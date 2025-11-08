@@ -13,6 +13,26 @@ const logger = Logger.getLogger('CloudFilesHook');
 
 export type CloudProvider = 'dropbox' | 'googledrive';
 
+// Cache simple avec TTL de 5 minutes
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+}
+
+const cloudFilesCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes en millisecondes
+
+// Fonction pour vérifier si une entrée de cache est valide
+const isCacheValid = (entry: CacheEntry | undefined): boolean => {
+  if (!entry) return false;
+  return (Date.now() - entry.timestamp) < CACHE_TTL;
+};
+
+// Fonction pour obtenir la clé de cache
+const getCacheKey = (provider: CloudProvider, path: string, userEmail: string): string => {
+  return `${provider}_${userEmail}_${path}`;
+};
+
 /**
  * Hook unifié pour gérer les fichiers cloud (Dropbox/Google Drive) via rclone
  * REMPLACE use-googledrive-files.tsx et les parties Dropbox équivalentes
@@ -22,11 +42,25 @@ export const useCloudFiles = () => {
   
   const refreshCloudFiles = useRecoilCallback(
     ({ set }) =>
-      async (path: string = '', provider: CloudProvider = 'dropbox') => {
+      async (path: string = '', provider: CloudProvider = 'dropbox', forceRefresh: boolean = false) => {
         try {
           // Vérifier que l'utilisateur est connecté
           if (!user?.email) {
             throw new Error('Utilisateur non connecté');
+          }
+          
+          // Vérifier le cache d'abord (sauf si forceRefresh)
+          const cacheKey = getCacheKey(provider, path, user.email);
+          const cachedEntry = cloudFilesCache.get(cacheKey);
+          
+          if (!forceRefresh && isCacheValid(cachedEntry)) {
+            logger.info(`💾 Utilisation du cache pour ${provider}:${path}`);
+            const parentItem = cachedEntry!.data;
+            // Mettre à jour le store Recoil avec les données en cache
+            const parentId = path ? `${provider}_${path}` : `${provider}_root`;
+            set(DriveItemAtom(parentId), parentItem);
+            set(DriveItemChildrenAtom(parentId), parentItem.children);
+            return parentItem;
           }
           
           logger.info(`📧 Récupération des fichiers ${provider} pour:`, user.email);
@@ -178,6 +212,13 @@ export const useCloudFiles = () => {
               set(DriveItemAtom(child.id), { item: child });
             }
           }
+          
+          // Mettre en cache le résultat
+          cloudFilesCache.set(cacheKey, {
+            data: parentItem,
+            timestamp: Date.now()
+          });
+          logger.info(`💾 Mise en cache de ${provider}:${path} (${driveItems.length} items)`);
           
           return parentItem;
           

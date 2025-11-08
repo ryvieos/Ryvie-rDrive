@@ -91,71 +91,94 @@ export default () => {
   if (sharedWithMe) folderType = 'shared';
   const [connectingDropbox, setConnectingDropbox] = useState(false);
   const [connectingGoogleDrive, setConnectingGoogleDrive] = useState(false);
-  const [dropboxConnected, setDropboxConnected] = useState(false);
-  const [googleDriveConnected, setGoogleDriveConnected] = useState(false);
+  // Initialiser avec localStorage pour affichage immédiat
+  const [dropboxConnected, setDropboxConnected] = useState(() => localStorage.getItem('dropbox_connected') === 'true');
+  const [googleDriveConnected, setGoogleDriveConnected] = useState(() => localStorage.getItem('googledrive_connected') === 'true');
+  // États de vérification en arrière-plan
+  const [verifyingDropbox, setVerifyingDropbox] = useState(false);
+  const [verifyingGoogleDrive, setVerifyingGoogleDrive] = useState(false);
   
-  // Détecter l'état de connexion basé sur la navigation et localStorage
+  // Vérification en arrière-plan de l'état de connexion (non-bloquante)
   useEffect(() => {
-    // Vérification réelle de la connexion backend pour chaque provider
-    const checkRealConnections = async () => {
+    // Vérification légère de la connexion backend pour chaque provider
+    const checkConnectionsInBackground = async () => {
       if (!user?.email) return;
       
-      // Utiliser des chemins relatifs /api pour passer par le reverse proxy Nginx
-      const backendUrl = '';
       const userEmail = encodeURIComponent(user.email);
       
-      // Vérifier Dropbox
-      try {
-        console.log('🔍 Vérification connexion Dropbox...');
-        const dropboxResponse = await fetch(`${backendUrl}/api/v1/files/rclone/list?path=&userEmail=${userEmail}&provider=dropbox`, {
-          headers: {
-            'Authorization': JWTStorage.getAutorizationHeader(),
-            'Content-Type': 'application/json'
+      // Vérifier Dropbox en arrière-plan
+      if (localStorage.getItem('dropbox_connected') === 'true') {
+        setVerifyingDropbox(true);
+        try {
+          console.log('🔍 Vérification arrière-plan Dropbox...');
+          // Utiliser le nouvel endpoint léger (Phase 2)
+          const dropboxResponse = await fetch(`/api/v1/files/rclone/status?provider=dropbox&userEmail=${userEmail}`, {
+            headers: {
+              'Authorization': JWTStorage.getAutorizationHeader(),
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (dropboxResponse.ok) {
+            const data = await dropboxResponse.json();
+            if (data.connected) {
+              console.log('✅ Dropbox vérifié et connecté');
+              setDropboxConnected(true);
+              localStorage.setItem('dropbox_connected', 'true');
+            } else {
+              console.warn('⚠️ Dropbox non connecté selon le backend');
+              setDropboxConnected(false);
+              localStorage.removeItem('dropbox_connected');
+            }
+          } else {
+            console.warn('⚠️ Dropbox vérification échouée, on garde le cache');
+            // On garde l'état du localStorage en cas d'erreur temporaire
           }
-        });
-        
-        if (dropboxResponse.ok) {
-          console.log('✅ Dropbox connecté et fonctionnel');
-          setDropboxConnected(true);
-          localStorage.setItem('dropbox_connected', 'true');
-        } else {
-          console.warn('❌ Dropbox non accessible, nettoyage du cache');
-          setDropboxConnected(false);
-          localStorage.removeItem('dropbox_connected');
+        } catch (error) {
+          console.error('❌ Erreur vérification Dropbox:', error);
+          // On garde l'état du localStorage en cas d'erreur réseau
+        } finally {
+          setVerifyingDropbox(false);
         }
-      } catch (error) {
-        console.error('❌ Erreur vérification Dropbox:', error);
-        setDropboxConnected(false);
-        localStorage.removeItem('dropbox_connected');
       }
       
-      // Vérifier Google Drive
-      try {
-        console.log('🔍 Vérification connexion Google Drive...');
-        const googleResponse = await fetch(`${backendUrl}/api/v1/files/rclone/list?path=&userEmail=${userEmail}&provider=googledrive`, {
-          headers: {
-            'Authorization': JWTStorage.getAutorizationHeader(),
-            'Content-Type': 'application/json'
+      // Vérifier Google Drive en arrière-plan
+      if (localStorage.getItem('googledrive_connected') === 'true') {
+        setVerifyingGoogleDrive(true);
+        try {
+          console.log('🔍 Vérification arrière-plan Google Drive...');
+          const googleResponse = await fetch(`/api/v1/files/rclone/status?provider=googledrive&userEmail=${userEmail}`, {
+            headers: {
+              'Authorization': JWTStorage.getAutorizationHeader(),
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (googleResponse.ok) {
+            const data = await googleResponse.json();
+            if (data.connected) {
+              console.log('✅ Google Drive vérifié et connecté');
+              setGoogleDriveConnected(true);
+              localStorage.setItem('googledrive_connected', 'true');
+            } else {
+              console.warn('⚠️ Google Drive non connecté selon le backend');
+              setGoogleDriveConnected(false);
+              localStorage.removeItem('googledrive_connected');
+            }
+          } else {
+            console.warn('⚠️ Google Drive vérification échouée, on garde le cache');
           }
-        });
-        
-        if (googleResponse.ok) {
-          console.log('✅ Google Drive connecté et fonctionnel');
-          setGoogleDriveConnected(true);
-          localStorage.setItem('googledrive_connected', 'true');
-        } else {
-          console.warn('❌ Google Drive non accessible, nettoyage du cache');
-          setGoogleDriveConnected(false);
-          localStorage.removeItem('googledrive_connected');
+        } catch (error) {
+          console.error('❌ Erreur vérification Google Drive:', error);
+        } finally {
+          setVerifyingGoogleDrive(false);
         }
-      } catch (error) {
-        console.error('❌ Erreur vérification Google Drive:', error);
-        setGoogleDriveConnected(false);
-        localStorage.removeItem('googledrive_connected');
       }
     };
     
-    checkRealConnections();
+    // Lancer la vérification après un court délai pour ne pas bloquer le rendu initial
+    const timeoutId = setTimeout(checkConnectionsInBackground, 500);
+    return () => clearTimeout(timeoutId);
   }, [user?.email]);
 
 
@@ -275,125 +298,189 @@ export default () => {
           {Languages.t('components.side_menu.trash')}
         </Button>
 
-        {/* Bouton Dropbox dynamique */}
-        <Button
-          onClick={async () => {
-            if (!user) {
-              alert('Aucun utilisateur connecté');
-              return;
-            }
-
-            if (dropboxConnected) {
-              // Si connecté, naviguer vers My Dropbox
-              setParentId('dropbox_root');
-              history.push(`/client/${company}/v/dropbox_root`);
-            } else {
-              // Si pas connecté, initier la connexion OAuth
-              setConnectingDropbox(true);
-              try {
-                console.log('🔗 Connexion Dropbox pour l\'utilisateur:', user);
-                
-                const userEmail = encodeURIComponent(user.email);
-                // Appeler l'endpoint via le proxy: /api/v1/drivers/Dropbox
-                const response = await fetch(`/api/v1/drivers/Dropbox?userEmail=${userEmail}`);
-                
-                if (!response.ok) {
-                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const data = await response.json();
-                
-                if (data && data.addition && data.addition.AuthUrl) {
-                  console.log('🔀 Redirection vers Dropbox OAuth:', data.addition.AuthUrl);
-                  // Marquer comme connecté après redirection OAuth réussie
-                  localStorage.setItem('dropbox_connected', 'true');
-                  window.location.href = data.addition.AuthUrl;
-                } else {
-                  throw new Error('Invalid response format');
-                }
-              } catch (e) {
-                console.error('Dropbox connection error:', e);
-                setConnectingDropbox(false);
+        {/* Bouton Dropbox dynamique avec déconnexion */}
+        <div className="flex items-center gap-1 mb-1">
+          <Button
+            onClick={async () => {
+              if (!user) {
+                alert('Aucun utilisateur connecté');
+                return;
               }
-            }
-          }}
-          size="lg"
-          theme="white"
-          className={`w-full mb-1 ${dropboxConnected && (parentId === 'dropbox_root' || parentId.startsWith('dropbox_')) ? activeClass : ''}`}
-          testClassId={dropboxConnected ? "sidebar-dropbox-browse" : "sidebar-dropbox-connect"}
-          disabled={connectingDropbox}
-        >
-          <img 
-            src="https://cfl.dropboxstatic.com/static/images/favicon-vfl8lUR9B.ico" 
-            alt="Dropbox" 
-            className="w-5 h-5 mr-4"
-          />
-          {connectingDropbox 
-            ? Languages.t('drive.dropbox.redirecting')
-            : dropboxConnected 
-              ? Languages.t('drive.dropbox.my_drive')
-              : Languages.t('drive.dropbox.connect_button')}
-        </Button>
 
-        {/* Bouton Google Drive dynamique */}
-        <Button
-          onClick={async () => {
-            if (!user) {
-              alert('Aucun utilisateur connecté');
-              return;
-            }
-
-            if (googleDriveConnected) {
-              // Si connecté, naviguer vers My Google Drive
-              setParentId('googledrive_root');
-              history.push(`/client/${company}/v/googledrive_root`);
-            } else {
-              // Si pas connecté, initier la connexion OAuth
-              setConnectingGoogleDrive(true);
-              try {
-                console.log('🔗 Connexion Google Drive pour l\'utilisateur:', user);
-                
-                const userEmail = encodeURIComponent(user.email);
-                // Appeler l'endpoint via le proxy: /api/v1/drivers/GoogleDrive
-                const response = await fetch(`/api/v1/drivers/GoogleDrive?userEmail=${userEmail}`);
-                
-                if (!response.ok) {
-                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              if (dropboxConnected) {
+                // Si connecté, naviguer vers My Dropbox
+                setParentId('dropbox_root');
+                history.push(`/client/${company}/v/dropbox_root`);
+              } else {
+                // Si pas connecté, initier la connexion OAuth
+                setConnectingDropbox(true);
+                try {
+                  console.log('🔗 Connexion Dropbox pour l\'utilisateur:', user);
+                  
+                  const userEmail = encodeURIComponent(user.email);
+                  // Appeler l'endpoint via le proxy: /api/v1/drivers/Dropbox
+                  const response = await fetch(`/api/v1/drivers/Dropbox?userEmail=${userEmail}`);
+                  
+                  if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                  }
+                  
+                  const data = await response.json();
+                  
+                  if (data && data.addition && data.addition.AuthUrl) {
+                    console.log('🔀 Redirection vers Dropbox OAuth:', data.addition.AuthUrl);
+                    // Marquer comme connecté après redirection OAuth réussie
+                    localStorage.setItem('dropbox_connected', 'true');
+                    window.location.href = data.addition.AuthUrl;
+                  } else {
+                    throw new Error('Invalid response format');
+                  }
+                } catch (e) {
+                  console.error('Dropbox connection error:', e);
+                  setConnectingDropbox(false);
                 }
-                
-                const data = await response.json();
-                
-                if (data && data.addition && data.addition.AuthUrl) {
-                  console.log('🔀 Redirection vers Google Drive OAuth:', data.addition.AuthUrl);
-                  // Marquer comme connecté après redirection OAuth réussie
-                  localStorage.setItem('googledrive_connected', 'true');
-                  window.location.href = data.addition.AuthUrl;
-                } else {
-                  throw new Error('Invalid response format');
-                }
-              } catch (e) {
-                console.error('Google Drive connection error:', e);
-                setConnectingGoogleDrive(false);
               }
-            }
-          }}
-          size="lg"
-          theme="white"
-          className={`w-full mb-1 ${googleDriveConnected && (parentId === 'googledrive_root' || parentId.startsWith('googledrive_')) ? activeClass : ''}`}
-          testClassId={googleDriveConnected ? "sidebar-googledrive-browse" : "sidebar-googledrive-connect"}
-          disabled={connectingGoogleDrive}
-        >
-          <img 
-            src="https://ssl.gstatic.com/docs/doclist/images/drive_2022q3_32dp.png" 
-            alt="Google Drive" 
-            className="w-5 h-5 mr-4"
-          />
-          {connectingGoogleDrive 
-            ? Languages.t('drive.googledrive.redirecting')
-            : googleDriveConnected 
-              ? Languages.t('drive.googledrive.my_drive')
-              : Languages.t('drive.googledrive.connect_button')}
-        </Button>
+            }}
+            size="lg"
+            theme="white"
+            className={`flex-1 ${dropboxConnected && (parentId === 'dropbox_root' || parentId.startsWith('dropbox_')) ? activeClass : ''}`}
+            testClassId={dropboxConnected ? "sidebar-dropbox-browse" : "sidebar-dropbox-connect"}
+            disabled={connectingDropbox}
+          >
+            <img 
+              src="https://cfl.dropboxstatic.com/static/images/favicon-vfl8lUR9B.ico" 
+              alt="Dropbox" 
+              className="w-5 h-5 mr-4"
+            />
+            <span className="flex items-center gap-2">
+              {connectingDropbox 
+                ? Languages.t('drive.dropbox.redirecting')
+                : dropboxConnected 
+                  ? Languages.t('drive.dropbox.my_drive')
+                  : Languages.t('drive.dropbox.connect_button')}
+              {verifyingDropbox && (
+                <svg className="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              )}
+            </span>
+          </Button>
+          {dropboxConnected && (
+            <Button
+              onClick={() => {
+                if (confirm('Voulez-vous vraiment vous déconnecter de Dropbox ?')) {
+                  localStorage.removeItem('dropbox_connected');
+                  setDropboxConnected(false);
+                  console.log('🔓 Déconnexion de Dropbox');
+                  // Rediriger vers Mon disque
+                  history.push(`/client/${company}/v/user_${user?.id}`);
+                }
+              }}
+              size="lg"
+              theme="white"
+              className="px-3"
+              title="Se déconnecter de Dropbox"
+              testClassId="sidebar-dropbox-disconnect"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </Button>
+          )}
+        </div>
+
+        {/* Bouton Google Drive dynamique avec déconnexion */}
+        <div className="flex items-center gap-1 mb-1">
+          <Button
+            onClick={async () => {
+              if (!user) {
+                alert('Aucun utilisateur connecté');
+                return;
+              }
+
+              if (googleDriveConnected) {
+                // Si connecté, naviguer vers My Google Drive
+                setParentId('googledrive_root');
+                history.push(`/client/${company}/v/googledrive_root`);
+              } else {
+                // Si pas connecté, initier la connexion OAuth
+                setConnectingGoogleDrive(true);
+                try {
+                  console.log('🔗 Connexion Google Drive pour l\'utilisateur:', user);
+                  
+                  const userEmail = encodeURIComponent(user.email);
+                  // Appeler l'endpoint via le proxy: /api/v1/drivers/GoogleDrive
+                  const response = await fetch(`/api/v1/drivers/GoogleDrive?userEmail=${userEmail}`);
+                  
+                  if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                  }
+                  
+                  const data = await response.json();
+                  
+                  if (data && data.addition && data.addition.AuthUrl) {
+                    console.log('🔀 Redirection vers Google Drive OAuth:', data.addition.AuthUrl);
+                    // Marquer comme connecté après redirection OAuth réussie
+                    localStorage.setItem('googledrive_connected', 'true');
+                    window.location.href = data.addition.AuthUrl;
+                  } else {
+                    throw new Error('Invalid response format');
+                  }
+                } catch (e) {
+                  console.error('Google Drive connection error:', e);
+                  setConnectingGoogleDrive(false);
+                }
+              }
+            }}
+            size="lg"
+            theme="white"
+            className={`flex-1 ${googleDriveConnected && (parentId === 'googledrive_root' || parentId.startsWith('googledrive_')) ? activeClass : ''}`}
+            testClassId={googleDriveConnected ? "sidebar-googledrive-browse" : "sidebar-googledrive-connect"}
+            disabled={connectingGoogleDrive}
+          >
+            <img 
+              src="https://ssl.gstatic.com/docs/doclist/images/drive_2022q3_32dp.png" 
+              alt="Google Drive" 
+              className="w-5 h-5 mr-4"
+            />
+            <span className="flex items-center gap-2">
+              {connectingGoogleDrive 
+                ? Languages.t('drive.googledrive.redirecting')
+                : googleDriveConnected 
+                  ? Languages.t('drive.googledrive.my_drive')
+                  : Languages.t('drive.googledrive.connect_button')}
+              {verifyingGoogleDrive && (
+                <svg className="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              )}
+            </span>
+          </Button>
+          {googleDriveConnected && (
+            <Button
+              onClick={() => {
+                if (confirm('Voulez-vous vraiment vous déconnecter de Google Drive ?')) {
+                  localStorage.removeItem('googledrive_connected');
+                  setGoogleDriveConnected(false);
+                  console.log('🔓 Déconnexion de Google Drive');
+                  // Rediriger vers Mon disque
+                  history.push(`/client/${company}/v/user_${user?.id}`);
+                }
+              }}
+              size="lg"
+              theme="white"
+              className="px-3"
+              title="Se déconnecter de Google Drive"
+              testClassId="sidebar-googledrive-disconnect"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </Button>
+          )}
+        </div>
 
         {false && (
           <>

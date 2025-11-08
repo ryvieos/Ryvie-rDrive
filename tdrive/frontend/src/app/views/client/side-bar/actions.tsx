@@ -15,6 +15,8 @@ import { Button } from '@atoms/button/button';
 import Languages from "features/global/services/languages-service";
 import { useCurrentUser } from 'app/features/users/hooks/use-current-user';
 import useRouteState from 'app/features/router/hooks/use-route-state';
+import { useHistory } from 'react-router-dom';
+import { TrashIcon } from '@heroicons/react/outline';
 
 export const CreateModalWithUploadZones = ({ initialParentId }: { initialParentId?: string }) => {
   const companyId = useRouterCompany();
@@ -104,19 +106,41 @@ export default () => {
   const uploadZoneRef = useRef<UploadZone | null>(null);
   const { uploadTree } = useDriveUpload();
   const companyId = useRouterCompany();
+  const history = useHistory();
   const inTrash = viewId?.includes("trash") || false;
+  
+  // Détecter si on est dans Dropbox ou Google Drive
+  const isInCloudProvider = parentId?.startsWith('dropbox_') || parentId?.startsWith('googledrive_');
 
   const setConfirmDeleteModalState = useSetRecoilState(ConfirmDeleteModalAtom);
   const setCreationModalState = useSetRecoilState(CreateModalAtom);
   const setUploadModalState = useSetRecoilState(UploadModelAtom);
 
   const openItemModal = useCallback(() => {
-    if (item?.id) setCreationModalState({ open: true, parent_id: item.id });
-  }, [item?.id, setCreationModalState]);
+    // Si on est dans Dropbox/Google Drive, rediriger vers Mon disque
+    if (isInCloudProvider) {
+      history.push(`/client/${companyId}/v/user_${user?.id}`);
+      // Ouvrir le modal après la redirection
+      setTimeout(() => {
+        setCreationModalState({ open: true, parent_id: 'user_'+user?.id });
+      }, 100);
+    } else if (item?.id) {
+      setCreationModalState({ open: true, parent_id: item.id });
+    }
+  }, [item?.id, isInCloudProvider, user?.id, companyId, history, setCreationModalState]);
 
   const uploadItemModal = useCallback(() => {
-    if (item?.id) setUploadModalState({ open: true, parent_id: item.id });
-  }, [item?.id, setUploadModalState]);
+    // Si on est dans Dropbox/Google Drive, rediriger vers Mon disque
+    if (isInCloudProvider) {
+      history.push(`/client/${companyId}/v/user_${user?.id}`);
+      // Ouvrir le modal après la redirection
+      setTimeout(() => {
+        setUploadModalState({ open: true, parent_id: 'user_'+user?.id });
+      }, 100);
+    } else if (item?.id) {
+      setUploadModalState({ open: true, parent_id: item.id });
+    }
+  }, [item?.id, isInCloudProvider, user?.id, companyId, history, setUploadModalState]);
 
   return (
     <div className="-m-4 overflow-hidden testid:sidebar-actions">
@@ -124,68 +148,65 @@ export default () => {
         <div className="p-4">
           <CreateModalWithUploadZones initialParentId={parentId} />
 
-          {inTrash && (
-            <>
-              <Button
-                onClick={() =>
-                  setConfirmDeleteModalState({
-                    open: true,
-                    items: trashChildren,
-                  })
-                }
-                size="lg"
-                theme="danger"
-                className="w-full mb-2 justify-center"
-                disabled={!(trashChildren.length > 0)}
-                testClassId="create-modal-in-trash-button-empty-trash"
-              >
-                <TruckIcon className="w-5 h-5 mr-2" /> { Languages.t('components.side_menu.buttons.empty_trash') }
-              </Button>
-            </>
-          )}
-          {!(inTrash || access === 'read') && (
-            <>
-              <UploadZone
-                overClassName={'!hidden'}
-                className="hidden"
-                disableClick
-                parent={''}
-                multiple={true}
-                ref={uploadZoneRef}
-                driveCollectionKey={'side-menu'}
-                onAddFiles={async (_, event) => {
-                  const tree = await getFilesTree(event);
-                  setCreationModalState({ parent_id: '', open: false });
-                  uploadTree(tree, {
-                    companyId,
-                    parentId,
-                  });
-                }}
-                testClassId="sidebar-action-upload-zone"
-              />
+          {/* Boutons Télécharger et Créer - TOUJOURS VISIBLES */}
+          <UploadZone
+            overClassName={'!hidden'}
+            className="hidden"
+            disableClick
+            parent={''}
+            multiple={true}
+            ref={uploadZoneRef}
+            driveCollectionKey={'side-menu'}
+            onAddFiles={async (_, event) => {
+              const tree = await getFilesTree(event);
+              setCreationModalState({ parent_id: '', open: false });
+              uploadTree(tree, {
+                companyId,
+                parentId,
+              });
+            }}
+            testClassId="sidebar-action-upload-zone"
+          />
 
-              <Button
-                onClick={() => uploadItemModal()}
-                shortcut='U'
-                size="lg"
-                theme="primary"
-                className="w-full mb-2 justify-center"
-                style={{ boxShadow: '0 0 10px 0 rgba(0, 122, 255, 0.5)' }}
-                testClassId="button-upload"
-              >
-                <UploadIcon className="w-5 h-5 mr-2" /> {Languages.t('components.side_menu.buttons.upload')}
-              </Button>
-              <Button
-                onClick={() => openItemModal()}
-                shortcut='C'
-                size="lg"
-                theme="secondary"
-                className="w-full mb-2 justify-center"
-                testClassId="button-open-create-modal"
-              >
-                <PlusIcon className="w-5 h-5 mr-2" /> {Languages.t('components.side_menu.buttons.create')}
-              </Button>
-            </>
+          <Button
+            onClick={() => uploadItemModal()}
+            shortcut='U'
+            size="lg"
+            theme="primary"
+            className="w-full mb-2 justify-center"
+            style={{ boxShadow: '0 0 10px 0 rgba(0, 122, 255, 0.5)' }}
+            testClassId="button-upload"
+          >
+            <UploadIcon className="w-5 h-5 mr-2" /> {Languages.t('components.side_menu.buttons.upload')}
+          </Button>
+          <Button
+            onClick={() => openItemModal()}
+            shortcut='C'
+            size="lg"
+            theme="secondary"
+            className="w-full mb-2 justify-center"
+            testClassId="button-open-create-modal"
+          >
+            <PlusIcon className="w-5 h-5 mr-2" /> {Languages.t('components.side_menu.buttons.create')}
+          </Button>
+
+          {/* Bouton Supprimer - UNIQUEMENT dans la Corbeille */}
+          {inTrash && (
+            <Button
+              onClick={() =>
+                setConfirmDeleteModalState({
+                  open: true,
+                  items: trashChildren,
+                })
+              }
+              size="lg"
+              theme="danger"
+              className="w-full mb-2 justify-center"
+              disabled={!(trashChildren.length > 0)}
+              testClassId="create-modal-in-trash-button-empty-trash"
+            >
+              <TrashIcon className="w-5 h-5 mr-2" /> { Languages.t('components.side_menu.buttons.empty_trash') }
+            </Button>
           )}
         </div>
       </AnimatedHeight>

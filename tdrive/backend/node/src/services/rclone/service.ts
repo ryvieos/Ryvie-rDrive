@@ -1148,6 +1148,56 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
       }
     });
     
+    // 2.5) Status check - ENDPOINT LÉGER pour vérifier la connexion sans lister les fichiers
+    fastify.get(`${apiPrefix}/files/rclone/status`, {
+      preValidation: fastify.authenticate
+    }, async (request: any, reply) => {
+      const userEmail = request.query.userEmail as string || 'default@user.com';
+      const provider = (request.query.provider as string || 'dropbox') as 'dropbox' | 'googledrive';
+      
+      try {
+        logger.info(`🔍 Checking ${provider} connection status for user: ${userEmail}`);
+        
+        // Configurer l'utilisateur courant
+        this.currentUserEmail = userEmail;
+        
+        // Déterminer le remote name selon le provider
+        const remoteName = provider === 'googledrive' 
+          ? this.getGoogleDriveRemoteName(userEmail)
+          : this.getRemoteName(userEmail);
+        
+        // Vérifier si le remote existe dans la configuration rclone
+        const { exec } = require('child_process');
+        const configPath = '/root/.config/rclone/rclone.conf';
+        
+        return new Promise((resolve) => {
+          exec(`rclone --config ${configPath} listremotes`, (err: any, stdout: string, stderr: string) => {
+            if (err) {
+              logger.error(`❌ Failed to list remotes:`, err);
+              return resolve(reply.send({ connected: false, error: 'Failed to check remotes' }));
+            }
+            
+            // Vérifier si le remote existe dans la liste
+            const remotes = stdout.split('\n').map(r => r.trim().replace(':', ''));
+            const isConnected = remotes.includes(remoteName);
+            
+            logger.info(`${isConnected ? '✅' : '❌'} ${provider} remote "${remoteName}" ${isConnected ? 'found' : 'not found'}`);
+            
+            resolve(reply.send({ 
+              connected: isConnected,
+              provider,
+              remoteName,
+              userEmail
+            }));
+          });
+        });
+        
+      } catch (error) {
+        logger.error(`❌ ${provider} status check error:`, error);
+        return reply.send({ connected: false, error: error.message });
+      }
+    });
+    
     // 3) List files - ENDPOINT UNIFIÉ pour Dropbox et Google Drive
     fastify.get(`${apiPrefix}/files/rclone/list`, {
       preValidation: fastify.authenticate
