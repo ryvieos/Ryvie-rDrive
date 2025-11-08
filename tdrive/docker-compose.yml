@@ -1,4 +1,4 @@
-version: "3.4"
+version: "3.8"
 
 services:
   # ==========================================
@@ -204,6 +204,11 @@ services:
       - DEV=production
       - SSL_CERTS=off
       - NODE_HOST=http://node:4000
+      - REACT_APP_FRONTEND_URL=${REACT_APP_FRONTEND_URL}
+      - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
+      - REACT_APP_WEBSOCKET_URL=${REACT_APP_WEBSOCKET_URL}
+      - REACT_APP_ONLYOFFICE_CONNECTOR_URL=${REACT_APP_ONLYOFFICE_CONNECTOR_URL}
+      - REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL=${REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL}
     ports:
       - 3010:80
       - 8443:443

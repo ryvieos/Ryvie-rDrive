@@ -49,7 +49,9 @@ export const makeURLTo = {
     company_id: string;
     preview: string;
     office_token: string;
-  }) {
-    return Utils.joinURL([SERVER_ORIGIN ?? '', SERVER_PREFIX, 'editor'], params);
+  }, requestOrigin?: string) {
+    // Use request origin if provided (for local access), otherwise use SERVER_ORIGIN
+    const origin = requestOrigin ?? SERVER_ORIGIN ?? '';
+    return Utils.joinURL([origin, SERVER_PREFIX, 'editor'], params);
   },
 };

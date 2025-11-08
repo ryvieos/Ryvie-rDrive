@@ -1,9 +1,12 @@
+// @ts-ignore
+const config = window.APP_CONFIG || {};
+
 export default {
   env_dev: false,
   sentry_dsn: false,
-  front_root_url: (document.location.protocol || "http") + '//' + document.location.host,
-  api_root_url: (document.location.protocol || "http") + '//' + document.location.host,
-  websocket_url: (document.location.protocol || "http").replace("http", "ws") + '//' + document.location.host
+  front_root_url: config.FRONTEND_URL || ((document.location.protocol || "http") + '//' + document.location.host),
+  api_root_url: config.BACKEND_URL || ((document.location.protocol || "http") + '//' + document.location.host),
+  websocket_url: config.WEBSOCKET_URL || ((document.location.protocol || "http").replace("http", "ws") + '//' + document.location.host)
 };
 
 /*

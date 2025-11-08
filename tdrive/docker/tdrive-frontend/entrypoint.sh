@@ -42,4 +42,13 @@ NODE_HOST="${NODE_HOST:-http://node:3000}"
 export NODE_HOST
 envsubst '$${NODE_HOST} $${NGINX_LISTEN}' < /etc/nginx/sites-available/site.template > /etc/nginx/sites-enabled/site
 
+# Inject runtime environment variables into config.js
+if [ -f /tdrive-react/build/config.js ]; then
+  sed -i "s|__REACT_APP_FRONTEND_URL__|${REACT_APP_FRONTEND_URL:-}|g" /tdrive-react/build/config.js
+  sed -i "s|__REACT_APP_BACKEND_URL__|${REACT_APP_BACKEND_URL:-}|g" /tdrive-react/build/config.js
+  sed -i "s|__REACT_APP_WEBSOCKET_URL__|${REACT_APP_WEBSOCKET_URL:-}|g" /tdrive-react/build/config.js
+  sed -i "s|__REACT_APP_ONLYOFFICE_CONNECTOR_URL__|${REACT_APP_ONLYOFFICE_CONNECTOR_URL:-}|g" /tdrive-react/build/config.js
+  sed -i "s|__REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL__|${REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL:-}|g" /tdrive-react/build/config.js
+fi
+
 nginx -g "daemon off;"

@@ -99,6 +99,14 @@ class BrowserEditorController {
           expiresIn: 60 * 60 * 24 * 30,
         },
       );
+      
+      // Detect request origin to support both local and public access
+      // Check X-Forwarded-Proto header for proxied requests (HTTPS behind reverse proxy)
+      const forwardedProto = req.get('x-forwarded-proto');
+      const protocol = forwardedProto || req.protocol || 'http';
+      const host = req.get('host') || req.get('x-forwarded-host') || '';
+      const requestOrigin = host ? `${protocol}://${host}` : undefined;
+      
       res.redirect(
         makeURLTo.editorAbsolute({
           token,
@@ -108,7 +116,7 @@ class BrowserEditorController {
           company_id,
           preview,
           office_token: officeToken,
-        }),
+        }, requestOrigin),
       );
     } catch (error) {
       next(error);
