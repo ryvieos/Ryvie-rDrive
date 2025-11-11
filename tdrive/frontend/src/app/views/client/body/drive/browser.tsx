@@ -810,12 +810,7 @@ export default memo(
               <DndContext sensors={sensors} onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
                 <div className="grow overflow-auto relative" ref={scrollViewer} onMouseDown={onMouseDownScroll}>
                   {/* Indicateur de navigation instantanée */}
-                  {isNavigatingInstantly && (
-                    <div className="flex items-center justify-center py-4 text-blue-500">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
-                      <span className="text-sm">Navigation...</span>
-                    </div>
-                  )}
+                  {isNavigatingInstantly && <FolderRowSkeleton />}
                   {itemsCount === 0 && !loading && (
                     <div className="mt-4 text-center border-2 border-dashed rounded-md p-8">
                       <Subtitle className="block mb-2">

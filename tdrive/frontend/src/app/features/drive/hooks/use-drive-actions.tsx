@@ -56,10 +56,9 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
       // Créer un AbortController pour permettre l'annulation
       const abortController = new AbortController();
 
-      // Utiliser fetch avec les en-têtes d'authentification et les cookies
+      // Utiliser fetch avec les en-têtes d'authentification
       fetch(fileUrl, {
         method: 'GET',
-        credentials: 'include',
         headers: {
           Authorization: authHeader,
         },
@@ -73,12 +72,23 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
           // Extraire le nom du fichier de l'en-tête Content-Disposition s'il existe
           let extractedFileName = finalFileName;
           const contentDisposition = response.headers.get('Content-Disposition');
+          Logger.debug('Content-Disposition header:', contentDisposition);
           if (contentDisposition) {
-            const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            // Essayer d'abord filename*=UTF-8'' (RFC 5987)
+            let filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
             if (filenameMatch && filenameMatch[1]) {
-              extractedFileName = filenameMatch[1].replace(/['"]/g, '');
+              extractedFileName = decodeURIComponent(filenameMatch[1]);
+              Logger.debug('Extracted filename from UTF-8 encoding:', extractedFileName);
+            } else {
+              // Sinon essayer filename="..." ou filename=...
+              filenameMatch = contentDisposition.match(/filename="?([^";\n]+)"?/i);
+              if (filenameMatch && filenameMatch[1]) {
+                extractedFileName = filenameMatch[1].trim();
+                Logger.debug('Extracted filename from standard format:', extractedFileName);
+              }
             }
           }
+          Logger.debug('Final filename for download:', extractedFileName);
           
           // Obtenir la taille du fichier
           const contentLength = response.headers.get('Content-Length');
@@ -348,10 +358,9 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
           // Créer un AbortController pour permettre l'annulation
           const abortController = new AbortController();
 
-          // Utiliser fetch avec les en-têtes d'authentification et les cookies
+          // Utiliser fetch avec les en-têtes d'authentification
           fetch(url, {
             method: 'GET',
-            credentials: 'include',
             headers: {
               Authorization: authHeader,
             },

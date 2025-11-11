@@ -47,7 +47,26 @@ class App {
   };
 
   private initMiddlewares = () => {
-    this.app.use(cors());
+    // Gérer les requêtes preflight pour Private Network Access (Chrome)
+    this.app.use((req, res, next) => {
+      // Vérifier si c'est une requête preflight pour accès réseau privé
+      const requestPrivateNetwork = req.headers['access-control-request-private-network'];
+      
+      if (requestPrivateNetwork) {
+        logger.info(`Private Network Access preflight détecté depuis ${req.headers.origin}`);
+        res.setHeader('Access-Control-Allow-Private-Network', 'true');
+      }
+      
+      next();
+    });
+    
+    this.app.use(cors({
+      credentials: true,
+      origin: true, // Autoriser toutes les origines
+      preflightContinue: false,
+      optionsSuccessStatus: 204
+    }));
+    
     this.app.use(cookieParser());
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));

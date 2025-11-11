@@ -57,7 +57,8 @@
       "level": "info"
     },
     "cors": {
-      "origin": "*"
+      "origin": "*",
+      "exposedHeaders": ["Content-Disposition", "Content-Length"]
     },
     "static": {
       "root": "./public"
