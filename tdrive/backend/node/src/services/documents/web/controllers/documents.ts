@@ -552,6 +552,10 @@ export class DocumentsController {
         id,
         versionId,
         archive => {
+          // Add CORS headers manually for streaming response
+          response.raw.setHeader("Access-Control-Allow-Origin", "*");
+          response.raw.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
+          
           archive.on("finish", () => {
             response.status(200);
           });
@@ -630,6 +634,10 @@ export class DocumentsController {
             "content-disposition",
             formatAttachmentContentDispositionHeader("twake_drive.zip"),
           );
+          
+          // Add CORS headers manually for streaming response
+          reply.raw.setHeader("Access-Control-Allow-Origin", "*");
+          reply.raw.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
 
           archive.on("finish", () => {
             reply.status(200);
