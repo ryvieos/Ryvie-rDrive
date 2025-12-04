@@ -185,7 +185,7 @@ services:
       - ldap_my_custom_network
 
   frontend:
-    image: julescloud/rdrive-frontend:v0.0.1
+    image: julescloud/rdrive-frontend:v0.0.3
     container_name: app-rdrive-frontend
     environment:
       - DEV=production

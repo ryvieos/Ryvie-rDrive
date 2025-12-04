@@ -94,7 +94,7 @@ export const useEditors = (
     
     // Base du connecteur: toujours issue de la config runtime (même origine en local via Caddy)
     // @ts-ignore
-    const connectorUrl = (window.APP_CONFIG?.ONLYOFFICE_CONNECTOR_URL) || process.env.REACT_APP_ONLYOFFICE_CONNECTOR_URL || `${window.location.protocol}//${window.location.hostname}`;
+    const connectorUrl = (window.APP_CONFIG?.ONLYOFFICE_CONNECTOR_URL) || process.env.REACT_APP_ONLYOFFICE_CONNECTOR_URL || `${window.location.protocol}//${window.location.host}`;
 
     // Déterminer si c'est pour une prévisualisation ou pour l'édition
     const isPreview = !drive_id;

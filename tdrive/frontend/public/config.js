@@ -11,7 +11,7 @@
       BACKEND_URL: protocol + '//' + hostname + ':4000',
       WEBSOCKET_URL: (protocol === 'https:' ? 'wss:' : 'ws:') + '//' + hostname + ':4000/ws',
       // Le connecteur est servi via le proxy Caddy sous la même origine
-      ONLYOFFICE_CONNECTOR_URL: protocol + '//' + hostname,
+      ONLYOFFICE_CONNECTOR_URL: protocol + '//' + hostname + ':5000',
       ONLYOFFICE_DOCUMENT_SERVER_URL: protocol + '//' + hostname + ':8090'
     };
   } else {

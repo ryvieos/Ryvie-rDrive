@@ -14,22 +14,18 @@ export default ({ openSideMenu }: { openSideMenu: () => void }) => {
       }}
     >
       <div className="sm:block hidden shrink-0 w-2/6 max-w-xs" style={{ minWidth: 100 }}>
-        <div className="sm:inline-grid">
+        <div className="flex items-center gap-2">
           <img
-            src="/public/img/logo/logo-text-black.svg"
-            className="h-14 ml-1 dark:hidden block"
-            alt="Tdrive"
+            src="/public/img/logo/logo-color.svg"
+            className="h-10 w-10"
+            alt="rDrive"
           />
-          <img
-            src="/public/img/logo/logo-text-white.svg"
-            className="h-14 ml-1 dark:block hidden"
-            alt="Tdrive"
-          />
-        </div>
-        <div className="sm:inline-grid pl-3">
-          <Info className="font-bold overflow-hidden text-ellipsis whitespace-nowrap w-full block -mb-1 testid:version">
-            &nbsp;v{version.version}
-          </Info>
+          <div className="flex flex-col">
+            <span className="text-2xl font-bold text-black dark:text-white">rDrive</span>
+            <Info className="font-bold overflow-hidden text-ellipsis whitespace-nowrap w-full block -mt-1 testid:version">
+              v{version.version}
+            </Info>
+          </div>
         </div>
       </div>
       <div
