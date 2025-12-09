@@ -49,6 +49,7 @@ if [ -f /tdrive-react/build/config.js ]; then
   sed -i "s|__REACT_APP_WEBSOCKET_URL__|${REACT_APP_WEBSOCKET_URL:-}|g" /tdrive-react/build/config.js
   sed -i "s|__REACT_APP_ONLYOFFICE_CONNECTOR_URL__|${REACT_APP_ONLYOFFICE_CONNECTOR_URL:-}|g" /tdrive-react/build/config.js
   sed -i "s|__REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL__|${REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL:-}|g" /tdrive-react/build/config.js
+  sed -i "s|__REACT_APP_FRONTEND_URL_PRIVATE__|${REACT_APP_FRONTEND_URL_PRIVATE:-}|g" /tdrive-react/build/config.js
 fi
 
 nginx -g "daemon off;"

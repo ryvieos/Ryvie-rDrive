@@ -8,6 +8,7 @@ import fileService from '@/services/file.service';
 import { OfficeToken } from '@/interfaces/office-token.interface';
 import logger from '@/lib/logger';
 import { makeURLTo } from '@/routes';
+import { networkInterfaces } from 'os';
 
 interface RequestQuery {
   mode: string;
@@ -23,6 +24,94 @@ interface RequestEditorQuery {
   company_id: string;
   file_id: string;
   drive_file_id: string;
+}
+
+/**
+ * Get the private IP address of the machine's primary network interface
+ * Prioritizes physical network interfaces (enp, eth, ens) over virtual ones (wt, docker, br)
+ */
+function getPrivateIPAddress(): string | null {
+  const nets = networkInterfaces();
+  
+  logger.info('🔍 [getPrivateIPAddress] Détection de l\'IP privée - Interfaces disponibles:', Object.keys(nets));
+  
+  // Interfaces to exclude (Docker, virtual bridges, etc.)
+  const excludedPrefixes = ['br-', 'docker', 'veth'];
+  
+  // First pass: look for physical network interfaces (enp, eth, ens, wlan)
+  const physicalInterfaces = ['enp', 'eth', 'ens', 'wlan'];
+  for (const name of Object.keys(nets)) {
+    // Skip excluded interfaces
+    if (excludedPrefixes.some(prefix => name.startsWith(prefix))) {
+      continue;
+    }
+    
+    // Check if it's a physical interface
+    if (physicalInterfaces.some(prefix => name.startsWith(prefix))) {
+      const netInterfaces = nets[name];
+      if (!netInterfaces) continue;
+      
+      for (const net of netInterfaces) {
+        if (net.family === 'IPv4' && !net.internal) {
+          const addr = net.address;
+          // Return any private IP from physical interface
+          if (addr.startsWith('10.') || 
+              addr.startsWith('192.168.') ||
+              (addr.startsWith('172.') && parseInt(addr.split('.')[1]) >= 16 && parseInt(addr.split('.')[1]) <= 31)) {
+            logger.info(`Detected primary network interface ${name} with IP ${addr}`);
+            return addr;
+          }
+        }
+      }
+    }
+  }
+  
+  // Second pass: fallback to any private IP (10.x, 192.168.x, 172.16-31.x) but still exclude Docker and Tailscale
+  for (const name of Object.keys(nets)) {
+    // Skip excluded interfaces
+    if (excludedPrefixes.some(prefix => name.startsWith(prefix))) {
+      continue;
+    }
+    
+    const netInterfaces = nets[name];
+    if (!netInterfaces) continue;
+    
+    for (const net of netInterfaces) {
+      if (net.family === 'IPv4' && !net.internal) {
+        const addr = net.address;
+        // Exclude Tailscale (100.x) from fallback - prioritize physical network IPs
+        if (addr.startsWith('10.') || 
+            addr.startsWith('192.168.') ||
+            (addr.startsWith('172.') && parseInt(addr.split('.')[1]) >= 16 && parseInt(addr.split('.')[1]) <= 31)) {
+          logger.info(`Detected fallback network interface ${name} with IP ${addr}`);
+          return addr;
+        }
+      }
+    }
+  }
+  
+  // Third pass: if no physical private IP found, use Tailscale as last resort
+  for (const name of Object.keys(nets)) {
+    if (excludedPrefixes.some(prefix => name.startsWith(prefix))) {
+      continue;
+    }
+    
+    const netInterfaces = nets[name];
+    if (!netInterfaces) continue;
+    
+    for (const net of netInterfaces) {
+      if (net.family === 'IPv4' && !net.internal) {
+        const addr = net.address;
+        if (addr.startsWith('100.')) {
+          logger.info(`Detected Tailscale interface ${name} with IP ${addr} (last resort)`);
+          return addr;
+        }
+      }
+    }
+  }
+  
+  logger.error('No suitable private IP address found');
+  return null;
 }
 
 /**
@@ -151,8 +240,36 @@ class BrowserEditorController {
         CREDENTIALS_SECRET,
       );
 
+      // Detect request origin to use same hostname for OnlyOffice server (avoid CORS)
+      const forwardedProto = req.get('x-forwarded-proto');
+      const protocol = forwardedProto || req.protocol || 'http';
+      const host = req.get('host') || req.get('x-forwarded-host') || '';
+      
+      // Build OnlyOffice server URL using same origin as the request
+      let onlyofficeServerUrl = initResponse.onlyoffice_server;
+      if (host) {
+        // Extract hostname without port
+        const hostname = host.split(':')[0];
+        
+        // Special case: if accessing via ryvie.local, use the machine's private IP instead
+        // This avoids CORS Private Network Access issues with .local domains
+        let targetHost = hostname;
+        if (hostname === 'ryvie.local') {
+          const privateIP = getPrivateIPAddress();
+          if (privateIP) {
+            targetHost = privateIP;
+            logger.info(`Accessing via ryvie.local - using private IP ${privateIP} for OnlyOffice to avoid CORS`);
+          }
+        }
+        
+        // Use same hostname (or private IP) with OnlyOffice port (8090)
+        onlyofficeServerUrl = `${protocol}://${targetHost}:8090/`;
+        logger.info(`🔧 [editor] OnlyOffice Server URL finale: ${onlyofficeServerUrl} (host: ${host}, targetHost: ${targetHost})`);
+      }
+
       res.render('index', {
         ...initResponse,
+        onlyoffice_server: onlyofficeServerUrl,
         docId: preview ? file_id : editing_session_key,
         server: makeURLTo.rootAbsolute(),
         token: inPageToken,
