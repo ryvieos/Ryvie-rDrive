@@ -141,7 +141,7 @@ services:
       - DIAG_PROBE_SECRET=diag-secret
       - LDAP_URL=ldap://openldap:1389
       - LDAP_BIND_DN=cn=admin,dc=example,dc=org
-      - LDAP_BIND_PASSWORD=adminpassword
+      - LDAP_BIND_PASSWORD=${LDAP_BIND_PASSWORD}
       - LDAP_BASE_DN=dc=example,dc=org
       - LDAP_USERS_DN=ou=users,dc=example,dc=org
       - LDAP_GROUPS_DN=ou=groups,dc=example,dc=org
