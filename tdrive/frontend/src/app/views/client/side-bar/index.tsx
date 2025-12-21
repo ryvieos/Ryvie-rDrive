@@ -369,7 +369,7 @@ export default () => {
                   localStorage.removeItem('dropbox_connected');
                   setDropboxConnected(false);
                   console.log('🔓 Déconnexion de Dropbox');
-                  // Rediriger vers Mon disque
+                  // Rediriger vers Mon drive
                   history.push(`/client/${company}/v/user_${user?.id}`);
                 }
               }}
@@ -461,7 +461,7 @@ export default () => {
                   localStorage.removeItem('googledrive_connected');
                   setGoogleDriveConnected(false);
                   console.log('🔓 Déconnexion de Google Drive');
-                  // Rediriger vers Mon disque
+                  // Rediriger vers Mon drive
                   history.push(`/client/${company}/v/user_${user?.id}`);
                 }
               }}

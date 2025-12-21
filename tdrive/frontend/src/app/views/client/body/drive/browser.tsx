@@ -764,7 +764,7 @@ export default memo(
                       className={`h-4 w-4 mr-2 -ml-1 ${importingDropbox ? 'animate-spin' : ''}`} 
                     />
                     <span>
-                      {importingDropbox ? 'Synchronisation...' : 'Synchroniser avec Mon disque'}
+                      {importingDropbox ? 'Synchronisation...' : 'Synchroniser avec Mon drive'}
                     </span>
                   </Button>
                 )}
@@ -782,7 +782,7 @@ export default memo(
                       className={`h-4 w-4 mr-2 -ml-1 ${importingGoogleDrive ? 'animate-spin' : ''}`} 
                     />
                     <span>
-                      {importingGoogleDrive ? 'Synchronisation...' : 'Synchroniser avec Mon disque'}
+                      {importingGoogleDrive ? 'Synchronisation...' : 'Synchroniser avec Mon drive'}
                     </span>
                   </Button>
                 )}

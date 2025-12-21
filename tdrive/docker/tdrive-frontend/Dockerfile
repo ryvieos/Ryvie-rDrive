@@ -1,9 +1,6 @@
 # ---------- First stage: build frontend ----------
 FROM node:lts-alpine AS build
 
-# (optionnel) inutile d’installer webpack globalement si présent en devDeps
-# RUN npm install -g webpack webpack-cli
-
 WORKDIR /tdrive-react
 
 # Meilleur cache : d'abord les manifestes
@@ -11,13 +8,20 @@ COPY frontend/package*.json ./
 # Use npm install instead of npm ci because dependencies were updated without regenerating lockfile
 RUN npm install --legacy-peer-deps
 
-# Puis le reste du code
-COPY frontend/ .
+# Copier uniquement les fichiers de config nécessaires pour le build
+COPY frontend/tsconfig*.json frontend/craco.config.js frontend/tailwind.config.js ./
+COPY frontend/public ./public
 
+# Puis le code source (séparé pour meilleur cache)
+COPY frontend/src ./src
+
+# Optimisations pour accélérer le build
 ENV GENERATE_SOURCEMAP=false \
     DISABLE_ESLINT_PLUGIN=true \
     TSC_COMPILE_ON_ERROR=true \
-    SKIP_PREFLIGHT_CHECK=true
+    SKIP_PREFLIGHT_CHECK=true \
+    NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=4096"
 
 # Ensure a favicon.ico exists in the CRA public folder (fallback to PNG)
 RUN [ -f public/favicon.ico ] || cp public/favicon.png public/favicon.ico || true
@@ -41,9 +45,13 @@ ENV REACT_APP_FRONTEND_URL_PRIVATE=${REACT_APP_FRONTEND_URL_PRIVATE}
 # Copie de l'env si présent (sinon ne pas casser le build)
 RUN if [ -f src/app/environment/environment.ts.dist ]; then \
       cp src/app/environment/environment.ts.dist src/app/environment/environment.ts; \
-    fi && \
-    npm run build && \
-    rm -rf node_modules
+    fi
+
+# Build avec cache et optimisations
+RUN npm run build
+
+# Nettoyer pour réduire la taille de l'image
+RUN rm -rf node_modules src
 
 # ---------- Second stage: nginx ----------
 FROM nginx:latest

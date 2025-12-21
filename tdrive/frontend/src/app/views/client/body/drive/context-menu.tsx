@@ -131,14 +131,6 @@ export const useOnBuildContextMenu = (
               onClick: () => setPublicLinkModalState({ open: true, id: item.id }),
             },
             {
-              testClassId: 'manage-access',
-              type: 'menu',
-              icon: 'user-group',
-              text: Languages.t('components.item_context_menu.manage_access'),
-              hide: hideManageAccessItem,
-              onClick: () => setAccessModalState({ open: true, id: item.id }),
-            },
-            {
               testClassId: 'shared-drive-access',
               type: 'menu',
               icon: 'cloud',
@@ -147,6 +139,14 @@ export const useOnBuildContextMenu = (
                 : 'Partager dans Shared Drive',
               hide: inTrash || getPublicLinkToken() || (isCheckFileActionByAvStatus && !isAllowToShare),
               onClick: () => setSharedDriveModalState({ open: true, id: item.id }),
+            },
+            {
+              testClassId: 'manage-access',
+              type: 'menu',
+              icon: 'user-group',
+              text: Languages.t('components.item_context_menu.manage_access'),
+              hide: hideManageAccessItem,
+              onClick: () => setAccessModalState({ open: true, id: item.id }),
             },
             {
               testClassId: 'rescan-document',

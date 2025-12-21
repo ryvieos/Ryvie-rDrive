@@ -13,7 +13,7 @@ export function getFullName(user: Pick<UserType, 'username' | 'first_name' | 'la
   if (user.deleted) {
     name = Languages.t('general.user.deleted');
   } else {
-    name = [user.first_name, user.last_name].filter(a => a).map(toNameCase).join(' ');
+    name = [user.first_name, user.last_name].filter(a => a != null && a !== '').map(toNameCase).join(' ');
     name = name || user.username;
   }
 

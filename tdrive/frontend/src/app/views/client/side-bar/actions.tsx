@@ -117,7 +117,7 @@ export default () => {
   const setUploadModalState = useSetRecoilState(UploadModelAtom);
 
   const openItemModal = useCallback(() => {
-    // Si on est dans Dropbox/Google Drive, rediriger vers Mon disque
+    // Si on est dans Dropbox/Google Drive, rediriger vers Mon drive
     if (isInCloudProvider) {
       history.push(`/client/${companyId}/v/user_${user?.id}`);
       // Ouvrir le modal après la redirection
@@ -130,7 +130,7 @@ export default () => {
   }, [item?.id, isInCloudProvider, user?.id, companyId, history, setCreationModalState]);
 
   const uploadItemModal = useCallback(() => {
-    // Si on est dans Dropbox/Google Drive, rediriger vers Mon disque
+    // Si on est dans Dropbox/Google Drive, rediriger vers Mon drive
     if (isInCloudProvider) {
       history.push(`/client/${companyId}/v/user_${user?.id}`);
       // Ouvrir le modal après la redirection

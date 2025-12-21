@@ -32,14 +32,14 @@ export const InternalUsersAccessManager = ({
   const [searchString, setSearchString] = useState("");
   const [isFocus, setFocus] = useState(false);
   const inputElement = useRef<HTMLInputElement>(null);
-  const maxUserResultsShown = 5;
+  const maxUserResultsShown = 10;
   const minUserHeight = 3;
-  const showResults = isFocus && query?.trim();
+  const showResults = isFocus;
 
   const knownUsers = item && new Set(getAllUserAccesses(item).map(({id}) => id));
   const absentUserResults = item && result && result.filter(({id}) => !knownUsers?.has(id!));
   const shownResults = absentUserResults && absentUserResults.slice(0, maxUserResultsShown);
-  const resultFooterText = knownUsers && shownResults &&
+  const resultFooterText = knownUsers && shownResults && query?.trim() &&
     (shownResults.length == 0
     ? Languages.t('components.user_picker.modal_results_count_none', [searchString])
     : (absentUserResults.length > maxUserResultsShown

@@ -7,7 +7,7 @@ import { useCurrentUser } from '@features/users/hooks/use-current-user';
 
 /**
  * Hook pour précharger et mettre en cache les données des différentes sections du drive
- * Améliore la fluidité de navigation entre Mon disque, Disque partagé, Dropbox, etc.
+ * Améliore la fluidité de navigation entre Mon drive, Drive partagé, Dropbox, etc.
  */
 export const useDrivePrefetch = () => {
   const companyId = useRouterCompany();
@@ -72,8 +72,8 @@ export const useDrivePrefetch = () => {
     // Attendre 2 secondes après le chargement initial avant de précharger
     prefetchTimeoutRef.current = setTimeout(() => {
       const sectionsToPreload = [
-        `user_${user.id}`, // Mon disque
-        'shared_with_me', // Disque partagé
+        `user_${user.id}`, // Mon drive
+        'shared_with_me', // Drive partagé
         'trash', // Corbeille
       ];
 
