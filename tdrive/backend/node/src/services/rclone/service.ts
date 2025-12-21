@@ -34,13 +34,13 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     const sanitized = userEmail.replace(/[@\.]/g, '_').toLowerCase();
     return `googledrive_${sanitized}`;
   }
-  private PROXY = process.env.OAUTH_PROXY || 'https://cloudoauth.files.ryvie.fr';
-  private DROPBOX_APPKEY = 'fuv2aur5vtmg0r3'; 
-  private DROPBOX_APPSECRET = 'ejsdcf3b51q8hvf';
+  private PROXY = process.env.OAUTH_PROXY || 'https://cloudoauth-files.ryvie.fr';
+  private DROPBOX_APPKEY = process.env.DROPBOX_APPKEY || '';
+  private DROPBOX_APPSECRET = process.env.DROPBOX_APPSECRET || '';
   
   // Google Drive credentials
-  private GOOGLE_CLIENT_ID = '758017908766-8586ul049ht0h10vgp779dskk4riu7ug.apps.googleusercontent.com';
-  private GOOGLE_CLIENT_SECRET = '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';
+  private GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+  private GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
   private fs = require('fs');
   private path = require('path');
@@ -48,6 +48,14 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
   constructor() {
     super();
     logger.info("Initializing Rclone service");
+
+    if (!this.DROPBOX_APPKEY || !this.DROPBOX_APPSECRET) {
+      throw new Error('Missing Dropbox OAuth credentials: set DROPBOX_APPKEY and DROPBOX_APPSECRET');
+    }
+
+    if (!this.GOOGLE_CLIENT_ID || !this.GOOGLE_CLIENT_SECRET) {
+      throw new Error('Missing Google OAuth credentials: set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET');
+    }
   }
 
   api(): RcloneAPI {
@@ -236,7 +244,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
       callbackBase = `${protocol}://${host}/api/v1/recover/Dropbox`;
     }
     
-    const state = encodeURIComponent(callbackBase);
+    const state = encodeURIComponent(JSON.stringify({ callbackBase, userEmail: request?.query?.userEmail }));
     const scope = encodeURIComponent([
       'files.metadata.write',
       'files.content.write',
@@ -272,10 +280,11 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
       callbackBase = `${protocol}://${host}/api/v1/recover/GoogleDrive`;
     }
     
-    const state = encodeURIComponent(callbackBase);
+    const userEmail = request?.query?.userEmail;
+    const state = encodeURIComponent(JSON.stringify({ callbackBase, userEmail }));
     const scope = encodeURIComponent([
-      'https://www.googleapis.com/auth/drive.readonly',
-      'https://www.googleapis.com/auth/drive.metadata.readonly'
+      'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/drive.file'
     ].join(' '));
 
     const authUrl = [
@@ -1822,6 +1831,31 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         return reply.status(400).send('❌ Missing code for Google Drive');
       }
 
+      const stateParam = request.query.state as string | undefined;
+      let effectiveUserEmail: string | undefined;
+      if (stateParam) {
+        try {
+          // Le paramètre state peut être encodé plusieurs fois selon le proxy / la redirection
+          let decodedState = stateParam;
+          for (let i = 0; i < 2; i++) {
+            try {
+              decodedState = decodeURIComponent(decodedState);
+            } catch {
+              break;
+            }
+          }
+          if (decodedState.startsWith('{')) {
+            const parsed = JSON.parse(decodedState);
+            if (parsed && typeof parsed.userEmail === 'string' && parsed.userEmail) {
+              effectiveUserEmail = parsed.userEmail;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+      effectiveUserEmail = effectiveUserEmail || this.currentUserEmail || 'default@user.com';
+
       const params = new URLSearchParams({
         code: code,
         grant_type: 'authorization_code',
@@ -1844,7 +1878,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         }
 
         // Create rclone remote pour Google Drive
-        const remoteName = this.getGoogleDriveRemoteName(this.currentUserEmail);
+        const remoteName = this.getGoogleDriveRemoteName(effectiveUserEmail);
         
         const tokenForRclone = JSON.stringify({
           access_token: tokenJson.access_token,
@@ -1856,15 +1890,14 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         const configPath = '/root/.config/rclone/rclone.conf';
         const deleteCmd = `rclone --config ${configPath} config delete ${remoteName} 2>/dev/null || true`;
         const createCmd = `rclone --config ${configPath} config create ${remoteName} drive token '${tokenForRclone}' --non-interactive`;
-        
-        exec(`${deleteCmd} && ${createCmd}`, (err, stdout, stderr) => {
-          if (err) {
-            logger.error('Google Drive rclone config failed:', { error: err.message, stderr, stdout });
-          } else {
-            logger.info(`✅ Google Drive Remote "${remoteName}" created in rclone.conf`);
-            logger.info('Google Drive rclone stdout:', stdout);
-          }
-        });
+
+        try {
+          await execAsync(`${deleteCmd} && ${createCmd}`);
+          logger.info(`✅ Google Drive Remote "${remoteName}" created in rclone.conf`);
+        } catch (err: any) {
+          logger.error('Google Drive rclone config failed:', { error: err?.message });
+          return reply.status(500).send('Google Drive rclone config failed');
+        }
 
         // Redirection automatique vers rdrive après authentification réussie
         // 1) Priorité: en-têtes X-Forwarded-* fournis par Nginx (préservent le port)

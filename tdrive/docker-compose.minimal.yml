@@ -28,6 +28,10 @@ services:
     environment: &backend_env_vars
       - DEV=dev
       - ACCOUNTS_TYPE=internal
+      - DROPBOX_APPKEY=${DROPBOX_APPKEY}
+      - DROPBOX_APPSECRET=${DROPBOX_APPSECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - DB_DRIVER=mongodb
       - DB_MONGO_URI=mongodb://mongo:27017
       - PUBSUB_TYPE=local

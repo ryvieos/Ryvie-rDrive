@@ -35,7 +35,7 @@ const PORT = 3010;
 const REMOTE_NAME = 'test4';
 
 // Config
-const PROXY = process.env.OAUTH_PROXY || 'https://cloudoauth.files.ryvie.fr';
+const PROXY = process.env.OAUTH_PROXY || 'https://cloudoauth-files.ryvie.fr';
 const DROPBOX_APPKEY = '4b5q5772012fqnf';
 const DROPBOX_APPSECRET = 'obtjnollfq4j5ck';
 

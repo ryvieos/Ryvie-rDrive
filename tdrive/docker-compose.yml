@@ -131,6 +131,11 @@ services:
     environment: &backend_env_vars
       - DEV=dev
       - ACCOUNTS_TYPE=internal
+      - OAUTH_PROXY=https://cloudoauth-files.ryvie.fr
+      - DROPBOX_APPKEY=${DROPBOX_APPKEY}
+      - DROPBOX_APPSECRET=${DROPBOX_APPSECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - DB_DRIVER=mongodb
       - DB_MONGO_URI=mongodb://mongo:27017
       - PUBSUB_TYPE=local
@@ -150,7 +155,7 @@ services:
       - ./backend/node/profiles:/usr/src/app/profiles
       - ./backend/node/src:/usr/src/app/src
       - ./docker-data/files:/tdrive/docker-data/files
-      - /usr/bin/rclone:/usr/bin/rclone:ro
+      - /usr/bin/rclone/rclone.new:/usr/bin/rclone:ro
       - /data/config/rclone:/root/.config/rclone
     depends_on: &backend_dependencies
       mongo:
