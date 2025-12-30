@@ -54,23 +54,3 @@ This Code of Conduct applies both within project spaces and in public spaces whe
 
 
 
-## Reporting Code of Conduct Issues
-
-We encourage all community members to resolve issues on their own whenever possible. This builds a broader and deeper understanding and ultimately a healthier interaction. In the event that an issue cannot be resolved locally, please feel free to report your concerns by contacting schauhan@linagora.com. Your report will be handled in accordance with the issue resolution process described in the Code of Conduct FAQ on our website(https://linagora.com). 
-
-In your report please include: 
-
-- Your contact information. 
-- Names (real, usernames or pseudonyms) of any individuals involved. If there are additional witnesses, please include them as well. 
-- Your account of what occurred, and if you believe the incident is ongoing. If there is a publicly available record (e.g. a mailing list archive or a public chat log), please include a link or attachment. 
-- Any additional information that may be helpful. 
-
-All reports will be reviewed by a multi-person team and will result in a response that is deemed necessary and appropriate to the circumstances. Where additional perspectives are needed, the team may seek insight from others with relevant expertise or experience. The confidentiality of the person reporting the incident will be kept at all times. Involved parties are never a part of the review team. 
-
-Anyone asked to stop unacceptable behavior is expected to comply immediately. If an individual engages in unacceptable behavior, the review team may take an action they deem appropriate, including a permanent ban from the community. 
-
-
-
-## Attribution
-
-This Code of Conduct is adapted from both the [Contributor Covenant](https://www.contributor-covenant.org/), version 1.4, available at https://www.contributor-covenant.org/version/1/4/code-of-conduct.html and the template established by the [TODO Group](https://todogroup.org/). 
