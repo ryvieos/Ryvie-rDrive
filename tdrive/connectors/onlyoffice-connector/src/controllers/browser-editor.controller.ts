@@ -267,11 +267,27 @@ class BrowserEditorController {
         logger.info(`🔧 [editor] OnlyOffice Server URL finale: ${onlyofficeServerUrl} (host: ${host}, targetHost: ${targetHost})`);
       }
 
+      // Build connector server URL using same hostname detection as OnlyOffice server
+      // This ensures OnlyOffice Document Server can reach the connector for callbacks
+      let connectorServerUrl = makeURLTo.rootAbsolute();
+      if (host) {
+        const hostname = host.split(':')[0];
+        let targetHost = hostname;
+        if (hostname === 'ryvie.local') {
+          const privateIP = getPrivateIPAddress();
+          if (privateIP) {
+            targetHost = privateIP;
+          }
+        }
+        connectorServerUrl = `${protocol}://${targetHost}:5000/plugins/onlyoffice/`;
+        logger.info(`🔧 [editor] Connector Server URL for OnlyOffice callbacks: ${connectorServerUrl}`);
+      }
+
       res.render('index', {
         ...initResponse,
         onlyoffice_server: onlyofficeServerUrl,
         docId: preview ? file_id : editing_session_key,
-        server: makeURLTo.rootAbsolute(),
+        server: connectorServerUrl,
         token: inPageToken,
       });
     } catch (error) {
