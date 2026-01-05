@@ -96,8 +96,8 @@ services:
       - SERVER_PORT=5000
       - SERVER_PREFIX=/plugins/onlyoffice/
       - SERVER_ORIGIN=${REACT_APP_ONLYOFFICE_CONNECTOR_URL}
-      - CREDENTIALS_ENDPOINT=${REACT_APP_BACKEND_URL}/
-      - ONLY_OFFICE_SERVER=${REACT_APP_ONLYOFFICE_DOCUMENT_SERVER_URL}/
+      - CREDENTIALS_ENDPOINT=http://localhost:4000/
+      - ONLY_OFFICE_SERVER=http://localhost:8090/
       - CREDENTIALS_ID=tdrive_onlyoffice
       - CREDENTIALS_SECRET=c1cc66db78e1d3bb4713c55d5ab2
     network_mode: host
