@@ -1,9 +1,9 @@
 # Ryvie rDrive
 
 <p align="center">
-  <img src="ryvielogo.png" alt="Ryvie Logo" width="150">
-  <span style="font-size: 48px; margin: 0 20px;">×</span>
-  <img src="rDriveicon.png" alt="rDrive Logo" width="150">
+  <img src="ryvielogo.png" alt="Ryvie Logo" width="150" style="vertical-align: middle;">
+  <span style="font-size: 48px; margin: 0 20px; vertical-align: middle;">×</span>
+  <img src="rDriveicon.png" alt="rDrive Logo" width="150" style="vertical-align: middle;">
 </p>
 
 <p align="center">
@@ -22,7 +22,27 @@
 
 ---
 
-## 🚀 Fonctionnalités
+## � Aperçu
+
+### Interface principale
+
+<p align="center">
+  <img src="screenshots/rdrive-interface.png" alt="Interface rDrive" width="800">
+  <br>
+  <i>Interface de gestion des fichiers avec navigation intuitive</i>
+</p>
+
+### Éditeur OnlyOffice
+
+<p align="center">
+  <img src="screenshots/onlyoffice-editor.png" alt="Éditeur OnlyOffice" width="800">
+  <br>
+  <i>Édition collaborative de documents Excel avec OnlyOffice</i>
+</p>
+
+---
+
+## �🚀 Fonctionnalités
 
 - **📁 Gestion de fichiers** : Upload, download, organisation en dossiers
 - **📝 Édition collaborative** : OnlyOffice intégré (Word, Excel, PowerPoint)
