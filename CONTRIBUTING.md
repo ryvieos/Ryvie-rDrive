@@ -1,4 +1,4 @@
-# Contributing to Twake
+# Contributing to rDrive
 
 Hey! Thank you for your interest in contributing to Twake, we really appreciate it.
 
