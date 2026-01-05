@@ -1,7 +1,9 @@
 # Ryvie rDrive
 
 <p align="center">
-  <img src="ryvielogo.png" alt="Ryvie rDrive Logo" width="200">
+  <img src="ryvielogo.png" alt="Ryvie Logo" width="150">
+  <span style="font-size: 48px; margin: 0 20px;">×</span>
+  <img src="rDriveicon.png" alt="rDrive Logo" width="150">
 </p>
 
 <p align="center">
