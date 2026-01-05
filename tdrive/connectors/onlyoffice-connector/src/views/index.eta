@@ -5,7 +5,7 @@
   <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.0/jquery.min.js"></script>
   <script type="text/javascript" src="<%= it.onlyoffice_server %>web-apps/apps/api/documents/api.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no,shrink-to-fit=no" />
-  <title>Twake Drive</title>
+  <title>rDrive</title>
 </head>
 
 <body style="height: 100%">
@@ -37,7 +37,7 @@
       }
       function updateTitle(title) {
         const el = document.querySelector('head title');
-        if (el) el.innerText = title + ' — Twake Drive';
+        if (el) el.innerText = title + ' — rDrive';
       }
       updateTitle(doc.title);
 
