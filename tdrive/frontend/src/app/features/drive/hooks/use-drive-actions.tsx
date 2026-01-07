@@ -321,26 +321,39 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
         const triggerDownload = async () => {
           Logger.debug('Lancement du téléchargement ZIP');
           
-          // Déterminer un nom de fichier approprié pour le ZIP
+          // Déterminer un nom de fichier approprié pour le ZIP et calculer la taille totale
           let zipFileName = 'rDrive.zip';
           let displayName = 'rDrive';
+          let estimatedTotalSize = 0;
           
-          if (ids.length === 1) {
-            // Si c'est un seul dossier/fichier, on utilise son nom
-            try {
-              const itemDetails = await DriveApiClient.get(companyId, ids[0]);
-              // Accéder au nom en utilisant la structure correcte de DriveItemDetails
-              if (itemDetails && itemDetails.item && itemDetails.item.name) {
-                displayName = itemDetails.item.name;
-                zipFileName = `${displayName}.zip`;
+          // Récupérer les détails de tous les fichiers pour calculer la taille totale
+          try {
+            const itemsDetails = await Promise.all(
+              ids.map(id => DriveApiClient.get(companyId, id).catch(e => {
+                Logger.error('Erreur lors de la récupération des détails:', e);
+                return null;
+              }))
+            );
+            
+            // Calculer la taille totale en additionnant les tailles de tous les fichiers
+            for (const itemDetail of itemsDetails) {
+              if (itemDetail && itemDetail.item) {
+                estimatedTotalSize += itemDetail.item.size || 0;
               }
-            } catch (e) {
-              Logger.error('Erreur lors de la récupération des détails du dossier:', e);
             }
-          } else if (ids.length > 1) {
-            // Pour plusieurs fichiers, utiliser "rDrive" comme nom
-            displayName = 'rDrive';
-            zipFileName = 'rDrive.zip';
+            
+            Logger.debug('Taille totale estimée des fichiers:', estimatedTotalSize);
+            
+            // Définir le nom du fichier
+            if (ids.length === 1 && itemsDetails[0]?.item?.name) {
+              displayName = itemsDetails[0].item.name;
+              zipFileName = `${displayName}.zip`;
+            } else if (ids.length > 1) {
+              displayName = 'rDrive';
+              zipFileName = 'rDrive.zip';
+            }
+          } catch (e) {
+            Logger.error('Erreur lors du calcul de la taille totale:', e);
           }
           
           Logger.debug('Téléchargement du ZIP avec nom:', zipFileName);
@@ -371,11 +384,11 @@ export const useDriveActions = (inPublicSharing?: boolean) => {
                 throw new Error(`Erreur HTTP: ${response.status}`);
               }
               
-              // Obtenir la taille du fichier
+              // Obtenir la taille du fichier depuis le header, sinon utiliser la taille estimée
               const contentLength = response.headers.get('Content-Length');
-              const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+              const totalSize = contentLength ? parseInt(contentLength, 10) : estimatedTotalSize;
               
-              // Ajouter le téléchargement au service
+              // Ajouter le téléchargement au service avec la taille estimée
               FileDownloadService.addDownload(downloadId, zipFileName, totalSize, url, abortController);
               
               // Lire le flux de réponse avec suivi de progression

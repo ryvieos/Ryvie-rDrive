@@ -48,6 +48,10 @@
       "syntax-trailing-function-commas"
     ]
   },
+  "overrides": {
+    "lodash": "^4.17.21",
+    "url-parse": "^1.5.10"
+  },
   "dependencies": {
     "@ant-design/icons": "^4.2.2",
     "@craco/craco": "^7.0.0",

@@ -1,5 +1,9 @@
 version: "3.8"
 
+x-buildkit: &buildkit-config
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
 services:
   # ==========================================
   # OnlyOffice Stack
@@ -92,6 +96,8 @@ services:
     build:
       context: .
       dockerfile: docker/onlyoffice-connector/Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     environment:
       - SERVER_PORT=5000
       - SERVER_PREFIX=/plugins/onlyoffice/
@@ -133,14 +139,13 @@ services:
       context: .
       dockerfile: docker/tdrive-node/Dockerfile
       target: production
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     environment: &backend_env_vars
       - DEV=dev
       - ACCOUNTS_TYPE=internal
-      - OAUTH_PROXY=https://cloudoauth-files.ryvie.fr
-      - DROPBOX_APPKEY=${DROPBOX_APPKEY}
-      - DROPBOX_APPSECRET=${DROPBOX_APPSECRET}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - OAUTH_SERVICE_URL=${OAUTH_SERVICE_URL:-https://cloudoauth-files.ryvie.fr}
+      - INSTANCE_ID=${INSTANCE_ID}
       - DB_DRIVER=mongodb
       - DB_MONGO_URI=mongodb://mongo:27017
       - PUBSUB_TYPE=local
@@ -199,6 +204,7 @@ services:
       context: .
       dockerfile: docker/tdrive-frontend/Dockerfile
       args:
+        BUILDKIT_INLINE_CACHE: 1
         REACT_APP_FRONTEND_URL: ${REACT_APP_FRONTEND_URL}
         REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL}
         REACT_APP_WEBSOCKET_URL: ${REACT_APP_WEBSOCKET_URL}

@@ -1,4 +1,4 @@
-import { ChevronDownIcon, RefreshIcon, ViewGridIcon, ViewListIcon, TrashIcon, DotsVerticalIcon } from '@heroicons/react/outline';
+import { ChevronDownIcon, RefreshIcon, ViewGridIcon, ViewListIcon, TrashIcon, DotsVerticalIcon, DownloadIcon } from '@heroicons/react/outline';
 import { Button } from '@atoms/button/button';
 import { Base, BaseSmall, Subtitle, Title } from '@atoms/text';
 import Menu from '@components/menus/menu';
@@ -235,7 +235,7 @@ export default memo(
     const setConfirmTrashModalState = useSetRecoilState(ConfirmTrashModalAtom);
     const [activeIndex, setActiveIndex] = useState(null);
     const [activeChild, setActiveChild] = useState(null);
-    const { update } = useDriveActions();
+    const { update, download, downloadZip } = useDriveActions();
     const { importing: importingDropbox, importDropboxFolder } = useCloudImport();
     // État d'import séparé pour Google Drive
     const [importingGoogleDrive, setImportingGoogleDrive] = useState(false);
@@ -724,6 +724,27 @@ export default memo(
                   <>
                     <Button
                       theme={'secondary'}
+                      className="ml-2 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-blue-600 px-2 md:px-3"
+                      onClick={() => {
+                        if (selectedCount === 1) {
+                          const item = selectedItems[0];
+                          if (item.is_directory) {
+                            downloadZip([item.id]);
+                          } else {
+                            download(item.id);
+                          }
+                        } else {
+                          downloadZip(selectedItems.map(i => i.id));
+                        }
+                      }}
+                      testClassId="button-bulk-download"
+                    >
+                      <DownloadIcon className="h-4 w-4 mr-2 -ml-1" />
+                      <span>Télécharger</span>
+                    </Button>
+
+                    <Button
+                      theme={'secondary'}
                       className="ml-2 flex flex-row items-center border-0 md:border !text-gray-500 md:!text-red-600 px-2 md:px-3"
                       disabled={access !== 'manage'}
                       onClick={() => {
@@ -787,7 +808,7 @@ export default memo(
                   </Button>
                 )}
                 
-                {viewId !== 'shared_with_me' && buttonsVisible && (
+                {viewId !== 'shared_with_me' && viewId !== 'root' && buttonsVisible && (
                   <Menu menu={() => onBuildContextMenu(details)} testClassId="browser-menu-more">
                     {' '}
                     <Button
