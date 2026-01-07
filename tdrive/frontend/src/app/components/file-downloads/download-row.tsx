@@ -66,16 +66,18 @@ const DownloadRow = ({ download }: { download: DownloadItemType }): JSX.Element 
   const isFailed = download.status === 'failed';
   const isCancelled = download.status === 'cancelled';
 
-  // Helper to convert size to the closest unit
+  // Helper to convert size to the closest unit (Ko, Mo, Go only)
   const formatFileSize = (sizeInBytes: number): string => {
-    if (sizeInBytes) {
-      if (sizeInBytes < 1024) return `${sizeInBytes} Bytes`;
-      if (sizeInBytes < 1024 ** 2) return `${(sizeInBytes / 1024).toFixed(2)} KB`;
-      if (sizeInBytes < 1024 ** 3) return `${(sizeInBytes / 1024 ** 2).toFixed(2)} MB`;
-      return `${(sizeInBytes / 1024 ** 3).toFixed(2)} GB`;
-    } else {
-      return '0 Bytes';
+    if (!sizeInBytes) return '0 Ko';
+    
+    const k = 1024;
+    if (sizeInBytes < k) {
+      // Forcer minimum à Ko
+      return `${(sizeInBytes / k).toFixed(2)} Ko`;
     }
+    if (sizeInBytes < k ** 2) return `${(sizeInBytes / k).toFixed(2)} Ko`;
+    if (sizeInBytes < k ** 3) return `${(sizeInBytes / k ** 2).toFixed(2)} Mo`;
+    return `${(sizeInBytes / k ** 3).toFixed(2)} Go`;
   };
 
   // Helper to truncate the file name if it is too long
@@ -111,9 +113,17 @@ const DownloadRow = ({ download }: { download: DownloadItemType }): JSX.Element 
           </div>
           <p className="ml-4">
             <span className="font-bold">{truncateFileName(download.name)} </span>
-            {!isFailed && !isCancelled && download.downloadedSize > 0 && (
+            {!isFailed && !isCancelled && download.status === 'downloading' && (
               <span className="ml-4 text-sm">
-                ({formatFileSize(download.downloadedSize)} / {formatFileSize(download.size)})
+                {download.size > 0 
+                  ? `(${formatFileSize(download.downloadedSize)} / ${formatFileSize(download.size)})`
+                  : `(${formatFileSize(download.downloadedSize)} téléchargé...)`
+                }
+              </span>
+            )}
+            {!isFailed && !isCancelled && isCompleted && (
+              <span className="ml-4 text-sm">
+                ({formatFileSize(download.downloadedSize || download.size)})
               </span>
             )}
             {isFailed && (

@@ -14,9 +14,14 @@ export default class Numbers {
       ? navigator.language.toLowerCase().startsWith('fr')
       : false;
 
+    // Forcer minimum à Ko pour le français
+    if (isFr && Math.abs(bytes) < thresh) {
+      return `${(bytes / thresh).toFixed(1)} Ko`;
+    }
+
     if (Math.abs(bytes) < thresh) {
-      // Bytes label localized
-      return isFr ? `${bytes} o` : bytes + ' B';
+      // Bytes label localized (non-French only)
+      return bytes + ' B';
     }
 
     // Units localized for French, otherwise keep existing style

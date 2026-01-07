@@ -127,7 +127,7 @@ services:
 
   node_create_user:
     container_name: app-rdrive-node-create-user
-    image: julescloud/rdrive-node:v0.0.2
+    image: julescloud/rdrive-node:v0.0.3
     environment: &backend_env_vars
       - DEV=dev
       - ACCOUNTS_TYPE=internal
@@ -166,7 +166,7 @@ services:
   node:
     container_name: app-rdrive-node
     restart: unless-stopped
-    image: julescloud/rdrive-node:v0.0.4
+    image: julescloud/rdrive-node:v0.0.5
     ports:
       - 4000:4000
       - 9229:9229
@@ -187,7 +187,7 @@ services:
       - ldap_my_custom_network
 
   frontend:
-    image: julescloud/rdrive-frontend:v0.0.5
+    image: julescloud/rdrive-frontend:v0.0.6
     container_name: app-rdrive-frontend
     environment:
       - DEV=production
