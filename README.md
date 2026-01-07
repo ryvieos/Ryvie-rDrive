@@ -1,9 +1,7 @@
 # Ryvie rDrive
 
 <p align="center">
-  <img src="ryvielogo.png" alt="Ryvie Logo" width="150" style="vertical-align: middle;">
-  <span style="font-size: 48px; margin: 0 20px; vertical-align: middle;">×</span>
-  <img src="rDriveicon.png" alt="rDrive Logo" width="150" style="vertical-align: middle;">
+  <img src="rDriveicon.png" alt="rDrive Logo" width="200" style="vertical-align: middle;">
 </p>
 
 <p align="center">
@@ -22,7 +20,7 @@
 
 ---
 
-## � Aperçu
+## Aperçu
 
 ### Interface principale
 
@@ -42,7 +40,7 @@
 
 ---
 
-## �🚀 Fonctionnalités
+## 🚀 Fonctionnalités
 
 - **📁 Gestion de fichiers** : Upload, download, organisation en dossiers
 - **📝 Édition collaborative** : OnlyOffice intégré (Word, Excel, PowerPoint)
