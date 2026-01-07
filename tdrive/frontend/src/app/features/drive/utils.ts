@@ -13,10 +13,16 @@ export const formatBytes = (bytes: number, decimals = 2) => {
 
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  // Utiliser les unités en français: octets (o), Ko, Mo, Go, etc.
-  const sizes = ['o', 'Ko', 'Mo', 'Go', 'To', 'Po', 'Eo', 'Zo', 'Yo'];
+  // Utiliser uniquement Ko, Mo, Go (pas d'octets)
+  const sizes = ['Ko', 'Ko', 'Mo', 'Go', 'To', 'Po', 'Eo', 'Zo', 'Yo'];
 
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  let i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  // Forcer minimum à Ko (index 1)
+  if (i === 0) {
+    i = 1;
+    return `${parseFloat((bytes / k).toFixed(dm))} Ko`;
+  }
 
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
@@ -26,10 +32,16 @@ export const formatBytesToInt = (bytes: number, decimals = 2) => {
 
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  // Utiliser les unités en français: octets (o), Ko, Mo, Go, etc.
-  const sizes = ['o', 'Ko', 'Mo', 'Go', 'To', 'Po', 'Eo', 'Zo', 'Yo'];
+  // Utiliser uniquement Ko, Mo, Go (pas d'octets)
+  const sizes = ['Ko', 'Ko', 'Mo', 'Go', 'To', 'Po', 'Eo', 'Zo', 'Yo'];
 
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  let i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  // Forcer minimum à Ko (index 1)
+  if (i === 0) {
+    i = 1;
+    return `${parseInt((bytes / k).toFixed(dm))} Ko`;
+  }
 
   return `${parseInt((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };

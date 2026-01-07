@@ -127,15 +127,12 @@ services:
 
   node_create_user:
     container_name: app-rdrive-node-create-user
-    image: julescloud/rdrive-node:v0.0.2
+    image: julescloud/rdrive-node:v0.0.3
     environment: &backend_env_vars
       - DEV=dev
       - ACCOUNTS_TYPE=internal
-      - OAUTH_PROXY=https://cloudoauth-files.ryvie.fr
-      - DROPBOX_APPKEY=${DROPBOX_APPKEY}
-      - DROPBOX_APPSECRET=${DROPBOX_APPSECRET}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - OAUTH_SERVICE_URL=${OAUTH_SERVICE_URL:-https://cloudoauth-files.ryvie.fr}
+      - INSTANCE_ID=${INSTANCE_ID}
       - DB_DRIVER=mongodb
       - DB_MONGO_URI=mongodb://mongo:27017
       - PUBSUB_TYPE=local
@@ -169,7 +166,7 @@ services:
   node:
     container_name: app-rdrive-node
     restart: unless-stopped
-    image: julescloud/rdrive-node:v0.0.4
+    image: julescloud/rdrive-node:v0.0.5
     ports:
       - 4000:4000
       - 9229:9229
@@ -190,7 +187,7 @@ services:
       - ldap_my_custom_network
 
   frontend:
-    image: julescloud/rdrive-frontend:v0.0.5
+    image: julescloud/rdrive-frontend:v0.0.6
     container_name: app-rdrive-frontend
     environment:
       - DEV=production

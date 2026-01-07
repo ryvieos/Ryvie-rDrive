@@ -34,13 +34,9 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
     const sanitized = userEmail.replace(/[@\.]/g, '_').toLowerCase();
     return `googledrive_${sanitized}`;
   }
-  private PROXY = process.env.OAUTH_PROXY || 'https://cloudoauth-files.ryvie.fr';
-  private DROPBOX_APPKEY = process.env.DROPBOX_APPKEY || '';
-  private DROPBOX_APPSECRET = process.env.DROPBOX_APPSECRET || '';
-  
-  // Google Drive credentials
-  private GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-  private GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+  // Service OAuth centralisé
+  private OAUTH_SERVICE_URL = process.env.OAUTH_SERVICE_URL || 'https://cloudoauth-files.ryvie.fr';
+  private INSTANCE_ID = process.env.INSTANCE_ID || this.generateInstanceId();
 
   private fs = require('fs');
   private path = require('path');
@@ -48,14 +44,17 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
   constructor() {
     super();
     logger.info("Initializing Rclone service");
+    logger.info(`Using OAuth service: ${this.OAUTH_SERVICE_URL}`);
+    logger.info(`Instance ID: ${this.INSTANCE_ID}`);
+  }
 
-    if (!this.DROPBOX_APPKEY || !this.DROPBOX_APPSECRET) {
-      throw new Error('Missing Dropbox OAuth credentials: set DROPBOX_APPKEY and DROPBOX_APPSECRET');
-    }
-
-    if (!this.GOOGLE_CLIENT_ID || !this.GOOGLE_CLIENT_SECRET) {
-      throw new Error('Missing Google OAuth credentials: set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET');
-    }
+  /**
+   * Génère un ID d'instance unique si non fourni
+   */
+  private generateInstanceId(): string {
+    const id = uuidv4();
+    logger.warn(`No INSTANCE_ID provided, generated: ${id}`);
+    return id;
   }
 
   api(): RcloneAPI {
@@ -231,74 +230,42 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
   }
   
   async getAuthUrl(request?: any): Promise<string> {
-    const redirectUri = encodeURIComponent(this.PROXY);
-    
-    // Construire une URL de callback publique correcte derrière proxy
-    // Préférer les en-têtes X-Forwarded-* (fournis par Nginx) et utiliser le préfixe /api/v1
-    let callbackBase = '/api/v1/recover/Dropbox';
+    // Construire l'URL de callback pour cette instance
+    let callbackBase = '/api/v1/oauth/success';
     if (request) {
       const xfProto = (request.headers?.['x-forwarded-proto'] as string) || request.protocol || 'http';
       const xfHost = (request.headers?.['x-forwarded-host'] as string) || request.headers?.host || 'localhost';
       const protocol = xfProto.split(',')[0].trim();
       const host = xfHost.split(',')[0].trim();
-      callbackBase = `${protocol}://${host}/api/v1/recover/Dropbox`;
+      callbackBase = `${protocol}://${host}/api/v1/oauth/success`;
     }
     
-    const state = encodeURIComponent(JSON.stringify({ callbackBase, userEmail: request?.query?.userEmail }));
-    const scope = encodeURIComponent([
-      'files.metadata.write',
-      'files.content.write',
-      'files.content.read',
-      'sharing.write',
-      'account_info.read'
-    ].join(' '));
+    const userEmail = request?.query?.userEmail || 'default@user.com';
+    
+    // Rediriger vers le service OAuth centralisé
+    const authUrl = `${this.OAUTH_SERVICE_URL}/oauth/dropbox/start?instance_id=${encodeURIComponent(this.INSTANCE_ID)}&user_email=${encodeURIComponent(userEmail)}&callback_base=${encodeURIComponent(callbackBase)}`;
 
-    const authUrl = [
-      'https://www.dropbox.com/1/oauth2/authorize',
-      `client_id=${this.DROPBOX_APPKEY}`,
-      `redirect_uri=${redirectUri}`,
-      'response_type=code',
-      `scope=${scope}`,
-      `state=${state}`,
-      'token_access_type=offline'
-    ].join('&').replace('authorize&', 'authorize?');
-
-    logger.info('→ AuthUrl generated:', authUrl);
+    logger.info('→ Redirecting to centralized OAuth service:', authUrl);
     return authUrl;
   }
   
   async getGoogleDriveAuthUrl(request?: any): Promise<string> {
-    const redirectUri = encodeURIComponent(this.PROXY);
-    
-    // Construire une URL de callback publique correcte derrière proxy pour Google Drive
-    let callbackBase = '/api/v1/recover/GoogleDrive';
+    // Construire l'URL de callback pour cette instance
+    let callbackBase = '/api/v1/oauth/success';
     if (request) {
       const xfProto = (request.headers?.['x-forwarded-proto'] as string) || request.protocol || 'http';
       const xfHost = (request.headers?.['x-forwarded-host'] as string) || request.headers?.host || 'localhost';
       const protocol = xfProto.split(',')[0].trim();
       const host = xfHost.split(',')[0].trim();
-      callbackBase = `${protocol}://${host}/api/v1/recover/GoogleDrive`;
+      callbackBase = `${protocol}://${host}/api/v1/oauth/success`;
     }
     
-    const userEmail = request?.query?.userEmail;
-    const state = encodeURIComponent(JSON.stringify({ callbackBase, userEmail }));
-    const scope = encodeURIComponent([
-      'https://www.googleapis.com/auth/drive',
-      'https://www.googleapis.com/auth/drive.file'
-    ].join(' '));
+    const userEmail = request?.query?.userEmail || 'default@user.com';
+    
+    // Rediriger vers le service OAuth centralisé
+    const authUrl = `${this.OAUTH_SERVICE_URL}/oauth/google/start?instance_id=${encodeURIComponent(this.INSTANCE_ID)}&user_email=${encodeURIComponent(userEmail)}&callback_base=${encodeURIComponent(callbackBase)}`;
 
-    const authUrl = [
-      'https://accounts.google.com/o/oauth2/v2/auth',
-      `client_id=${this.GOOGLE_CLIENT_ID}`,
-      `redirect_uri=${redirectUri}`,
-      'response_type=code',
-      `scope=${scope}`,
-      `state=${state}`,
-      'access_type=offline',
-      'prompt=consent'
-    ].join('&').replace('auth&', 'auth?');
-
-    logger.info('→ Google Drive AuthUrl generated:', authUrl);
+    logger.info('→ Redirecting to centralized OAuth service for Google:', authUrl);
     return authUrl;
   }
 
@@ -1018,8 +985,117 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
 
     });
     
-    // 2) OAuth callback
-    // Le frontend s'attend à recevoir une redirection vers cette route (/api/v1)
+    // 2) Nouveau endpoint pour callback OAuth centralisé
+    fastify.get(`${apiPrefix}/oauth/success`, async (request: any, reply) => {
+      const success = request.query.success as string;
+      const provider = request.query.provider as string;
+      const userEmail = request.query.user_email as string;
+      const instanceId = request.query.instance_id as string;
+      
+      if (success === 'true' && userEmail && instanceId) {
+        logger.info(`✅ OAuth success for ${provider} - ${userEmail}`);
+        
+        try {
+          // Normaliser le provider (google -> googledrive pour rclone)
+          const normalizedProvider = provider === 'google' ? 'googledrive' : provider;
+          
+          // Récupérer le token depuis le service OAuth centralisé
+          const tokenResponse = await fetch(`${this.OAUTH_SERVICE_URL}/api/token/get`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              instance_id: instanceId,
+              user_email: userEmail,
+              provider: provider // Utiliser le provider original pour la requête
+            })
+          });
+          
+          if (!tokenResponse.ok) {
+            const errorText = await tokenResponse.text();
+            logger.error(`❌ Failed to get token from OAuth service: ${tokenResponse.status} - ${errorText}`);
+            throw new Error('Failed to retrieve token');
+          }
+          
+          const tokenData = await tokenResponse.json();
+          logger.info(`📥 Token retrieved for ${userEmail} (${provider})`, { hasAccessToken: !!tokenData.access_token, hasRefreshToken: !!tokenData.refresh_token });
+          
+          // Créer le remote rclone avec le token
+          const remoteName = normalizedProvider === 'googledrive' 
+            ? this.getGoogleDriveRemoteName(userEmail)
+            : this.getRemoteName(userEmail); // Utiliser le nom basé sur l'email pour Dropbox
+          
+          // Convertir le timestamp en date ISO pour rclone
+          const expiryTimestamp = tokenData.expiry || tokenData.expires_at;
+          const expiryISO = expiryTimestamp ? new Date(expiryTimestamp).toISOString() : undefined;
+          
+          const tokenForRclone = JSON.stringify({
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token,
+            expiry: expiryISO
+          });
+          
+          const configPath = '/root/.config/rclone/rclone.conf';
+          const deleteCmd = `rclone --config ${configPath} config delete ${remoteName} 2>/dev/null || true`;
+          const createCmd = normalizedProvider === 'googledrive'
+            ? `rclone --config ${configPath} config create ${remoteName} drive token '${tokenForRclone}' --non-interactive`
+            : `rclone --config ${configPath} config create ${remoteName} dropbox token '${tokenForRclone}' --non-interactive`;
+          
+          logger.info(`🔧 Creating rclone remote: ${remoteName} (${normalizedProvider})`);
+          
+          const { exec } = require('child_process');
+          exec(`${deleteCmd} && ${createCmd}`, (err: any, stdout: string, stderr: string) => {
+            if (err) {
+              logger.error(`❌ rclone config failed for ${remoteName}:`, { error: err.message, stderr, stdout });
+            } else {
+              logger.info(`✅ Remote "${remoteName}" created successfully`, { stdout, stderr });
+            }
+          });
+          
+        } catch (error) {
+          logger.error(`❌ Error creating rclone remote:`, error);
+        }
+        
+        // Redirection vers le frontend
+        const xfProto = (request.headers?.['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || request.protocol || 'http';
+        const xfHost = (request.headers?.['x-forwarded-host'] as string)?.split(',')[0]?.trim() || request.headers?.host || 'localhost';
+        const redirectUrl = `${xfProto}://${xfHost}/client`;
+        
+        const htmlResponse = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>${provider} Authentication Successful</title>
+            <meta charset="utf-8">
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+              .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
+              .success { color: #28a745; font-size: 18px; margin-bottom: 20px; }
+              .redirect { color: #6c757d; font-size: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="success">✅ ${provider} Authentication Successful!</div>
+              <div class="redirect">Redirecting to rDrive...</div>
+            </div>
+            <script>
+              setTimeout(() => {
+                window.location.href = '${redirectUrl}?_reload=' + Date.now();
+              }, 2000);
+            </script>
+          </body>
+          </html>
+        `;
+        
+        return reply.type('text/html').send(htmlResponse);
+      } else {
+        return reply.status(400).send('OAuth failed');
+      }
+    });
+    
+    // 2.1) OAuth callback legacy (rétrocompatibilité) - DÉSACTIVÉ car géré par le service OAuth centralisé
+    // Le service OAuth centralisé gère maintenant l'échange de tokens
+    /*
     fastify.get(`${apiPrefix}/recover/Dropbox`, async (request: any, reply) => {
       const fullUrl = `${request.protocol}://${request.hostname}${request.url}`;
       logger.info('🔔 Callback received:', fullUrl);
@@ -1029,12 +1105,13 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         return reply.status(400).send('❌ Missing code');
       }
 
+      // LEGACY CODE - Not used anymore with centralized OAuth service
       const params = new URLSearchParams({
         code: code,
         grant_type: 'authorization_code',
-        client_id: this.DROPBOX_APPKEY,
-        client_secret: this.DROPBOX_APPSECRET,
-        redirect_uri: this.PROXY
+        client_id: 'legacy',
+        client_secret: 'legacy',
+        redirect_uri: 'legacy'
       });
 
       try {
@@ -1163,6 +1240,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         return reply.status(500).send('Internal OAuth error');
       }
     });
+    */
     
     // 2.5) Status check - ENDPOINT LÉGER pour vérifier la connexion sans lister les fichiers
     fastify.get(`${apiPrefix}/files/rclone/status`, {
@@ -1821,7 +1899,8 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
       return reply.send({ addition: { AuthUrl: authUrl } });
     });
     
-    // 2) OAuth callback for Google Drive
+    // 2) OAuth callback for Google Drive - DÉSACTIVÉ car géré par le service OAuth centralisé
+    /*
     fastify.get(`${apiPrefix}/recover/GoogleDrive`, async (request: any, reply) => {
       const fullUrl = `${request.protocol}://${request.hostname}${request.url}`;
       logger.info('🔔 Google Drive Callback received:', fullUrl);
@@ -1856,12 +1935,13 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
       }
       effectiveUserEmail = effectiveUserEmail || this.currentUserEmail || 'default@user.com';
 
+      // LEGACY CODE - Not used anymore with centralized OAuth service
       const params = new URLSearchParams({
         code: code,
         grant_type: 'authorization_code',
-        client_id: this.GOOGLE_CLIENT_ID,
-        client_secret: this.GOOGLE_CLIENT_SECRET,
-        redirect_uri: this.PROXY
+        client_id: 'legacy',
+        client_secret: 'legacy',
+        redirect_uri: 'legacy'
       });
 
       try {
@@ -1988,6 +2068,7 @@ export default class RcloneService extends TdriveService<RcloneAPI> implements R
         return reply.status(500).send('Internal Google Drive OAuth error');
       }
     });
+    */
     
     // Note: Google Drive sync now uses the unified /api/v1/rclone/sync endpoint with provider=googledrive
 

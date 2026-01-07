@@ -11,6 +11,7 @@
       "sourceMap": true,
       "outDir": "dist",
       "baseUrl": ".",
+      "skipLibCheck": true,
       "paths": {
           "*": [
               "src/types/*"

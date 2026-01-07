@@ -113,7 +113,7 @@ export const useOnBuildContextMenu = (
             inTrash ||
             !FeatureTogglesService.isActiveFeatureName(FeatureNames.COMPANY_MANAGE_ACCESS);
 
-          // Vérifier si le fichier est déjà partagé dans le Shared Drive
+          // Vérifier si le fichier est déjà partagé dans le Drive partagé
           const currentAccessInfo = currentItem.access_info || { entities: [] };
           const sharedDriveEntity = currentAccessInfo.entities?.find(entity => 
             entity.type === "folder" && entity.id === "shared_drive"
@@ -135,8 +135,8 @@ export const useOnBuildContextMenu = (
               type: 'menu',
               icon: 'cloud',
               text: isSharedInSharedDrive 
-                ? `Shared Drive (${currentSharedDriveLevel === 'read' ? 'Lecture' : currentSharedDriveLevel === 'write' ? 'Écriture' : 'Gestion'})`
-                : 'Partager dans Shared Drive',
+                ? `Drive partagé (${currentSharedDriveLevel === 'read' ? 'Lecture' : currentSharedDriveLevel === 'write' ? 'Écriture' : 'Gestion'})`
+                : 'Partager dans Drive partagé',
               hide: inTrash || getPublicLinkToken() || (isCheckFileActionByAvStatus && !isAllowToShare),
               onClick: () => setSharedDriveModalState({ open: true, id: item.id }),
             },
@@ -300,7 +300,7 @@ export const useOnBuildContextMenu = (
               testClassId: 'shared-drive-access-manage-modal',
               type: 'menu',
               icon: 'cloud',
-              text: 'Shared Drive (gestion...)',
+              text: 'Drive partagé (gestion...)',
               hide: inTrash || parent.access !== 'manage',
               onClick: () => {
                 if (checked.length) {
@@ -411,7 +411,7 @@ export const useOnBuildContextMenu = (
                   testClassId: 'create-folder',
                   type: 'menu',
                   text: Languages.t('components.create_modal.create_folder'),
-                  hide: inTrash || parent.access === 'read',
+                  hide: inTrash || parent.access === 'read' || parent.item?.id === 'root',
                   onClick: () =>
                     parent?.item?.id &&
                     setCreationModalState({ open: true, parent_id: parent?.item?.id, type: 'folder' }),
@@ -420,7 +420,7 @@ export const useOnBuildContextMenu = (
                   testClassId: 'add-documents',
                   type: 'menu',
                   text: Languages.t('components.item_context_menu.add_documents'),
-                  hide: inTrash || parent.access === 'read',
+                  hide: inTrash || parent.access === 'read' || parent.item?.id === 'root',
                   onClick: () =>
                     parent?.item?.id &&
                     setUploadModalState({ open: true, parent_id: parent?.item?.id }),

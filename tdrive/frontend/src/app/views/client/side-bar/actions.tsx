@@ -111,6 +111,11 @@ export default () => {
   
   // Détecter si on est dans Dropbox ou Google Drive
   const isInCloudProvider = parentId?.startsWith('dropbox_') || parentId?.startsWith('googledrive_');
+  
+  // Détecter si on est dans le Drive partagé (root), Partagé avec moi, ou Corbeille
+  const isInSharedDrive = viewId === 'root' || parentId === 'root';
+  const isInSharedWithMe = viewId === 'shared_with_me';
+  const shouldHideCreateButton = isInSharedDrive || isInSharedWithMe || inTrash;
 
   const setConfirmDeleteModalState = useSetRecoilState(ConfirmDeleteModalAtom);
   const setCreationModalState = useSetRecoilState(CreateModalAtom);
@@ -179,16 +184,18 @@ export default () => {
           >
             <UploadIcon className="w-5 h-5 mr-2" /> {Languages.t('components.side_menu.buttons.upload')}
           </Button>
-          <Button
-            onClick={() => openItemModal()}
-            shortcut='C'
-            size="lg"
-            theme="secondary"
-            className="w-full mb-2 justify-center"
-            testClassId="button-open-create-modal"
-          >
-            <PlusIcon className="w-5 h-5 mr-2" /> {Languages.t('components.side_menu.buttons.create')}
-          </Button>
+          {!shouldHideCreateButton && (
+            <Button
+              onClick={() => openItemModal()}
+              shortcut='C'
+              size="lg"
+              theme="secondary"
+              className="w-full mb-2 justify-center"
+              testClassId="button-open-create-modal"
+            >
+              <PlusIcon className="w-5 h-5 mr-2" /> {Languages.t('components.side_menu.buttons.create')}
+            </Button>
+          )}
 
           {/* Bouton Supprimer - UNIQUEMENT dans la Corbeille */}
           {inTrash && (
