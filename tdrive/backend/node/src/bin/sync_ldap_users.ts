@@ -29,13 +29,32 @@ interface LDAPConfig {
 
 async function getAllLDAPUsers(): Promise<LDAPUser[]> {
   try {
+    const password = process.env.LDAP_BIND_PASSWORD;
+    
+    if (!password) {
+      console.error('❌ CRITICAL: LDAP_BIND_PASSWORD environment variable is not set!');
+      console.error('Please set LDAP_BIND_PASSWORD in your .env file or docker-compose.yml');
+      throw new Error('LDAP_BIND_PASSWORD is required but not set');
+    }
+    
+    if (password === 'adminpassword') {
+      console.warn('⚠️  WARNING: LDAP_BIND_PASSWORD is using the default value "adminpassword"');
+      console.warn('This is likely incorrect. Please verify your LDAP configuration.');
+    }
+    
     const ldapConfig: LDAPConfig = {
       url: process.env.LDAP_URL || 'ldap://localhost:389',
       bindDN: process.env.LDAP_BIND_DN || 'cn=admin,dc=example,dc=org',
-      bindPassword: process.env.LDAP_BIND_PASSWORD || 'adminpassword',
+      bindPassword: password,
       baseDN: process.env.LDAP_BASE_DN || 'dc=example,dc=org',
       usersDN: process.env.LDAP_USERS_DN || 'ou=users,dc=example,dc=org',
     };
+
+    console.log('🔧 LDAP Configuration:');
+    console.log(`   - URL: ${ldapConfig.url}`);
+    console.log(`   - Bind DN: ${ldapConfig.bindDN}`);
+    console.log(`   - Password set: ${ldapConfig.bindPassword ? 'YES' : 'NO'}`);
+    console.log(`   - Users DN: ${ldapConfig.usersDN}`);
 
     const command = `ldapsearch -x -H "${ldapConfig.url}" -D "${ldapConfig.bindDN}" -w "${ldapConfig.bindPassword}" -b "${ldapConfig.usersDN}" "(objectClass=person)" cn mail givenName sn`;
     
