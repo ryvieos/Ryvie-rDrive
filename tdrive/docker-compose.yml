@@ -153,7 +153,7 @@ services:
       - ./backend/node/profiles:/usr/src/app/profiles
       - ./backend/node/src:/usr/src/app/src
       - ./docker-data/files:/tdrive/docker-data/files
-      - /usr/bin/rclone:/usr/bin/rclone:ro
+      - /usr/bin/rclone:/usr/local/bin/rclone:ro
       - /data/config/rclone:/root/.config/rclone
     depends_on: &backend_dependencies
       mongo:
