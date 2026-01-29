@@ -8,7 +8,7 @@ export type TdriveLogger = pino.Logger;
 
 export const logger = pino({
   name: "TdriveApp",
-  level: config.get("level", "info") || "info",
+  level: config.get("level", "warn") || "warn",
   mixin() {
     const store = executionStorage.getStore();
     return store ? { ...store } : {};
