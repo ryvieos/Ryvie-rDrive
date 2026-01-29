@@ -88,7 +88,11 @@ export async function buildUserDeletionRepositories(
       user: await search.getRepository<User>(UserTYPE, User),
     },
   };
-  await Promise.all(Object.values(result).map(item => "init" in item && item.init()));
+  await Promise.all(
+    Object.values(result)
+      .filter(item => item !== null && typeof item === 'object')
+      .map(item => "init" in item && item.init())
+  );
   return result;
 }
 

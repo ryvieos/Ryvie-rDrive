@@ -1,14 +1,49 @@
 manifestVersion: 1
 id: rdrive
-category: storage
+category: 
+  fr: Stockage
+  en: Storage
 name: rDrive
 version: "0.0.1"
-buildId: 12
+buildId: 18
 port: 3010
-description: >-
-  Ryvie rDrive is a self-hosted cloud storage solution designed for individuals and businesses seeking a secure
+description: 
+  fr:
+    "rDrive est une solution de stockage de fichiers auto-hébergée, sécurisée et facile à utiliser.
+
+    Gérez, partagez et synchronisez vos fichiers en toute simplicité. Que ce soit pour un usage personnel ou professionnel, rDrive vous offre un espace de stockage fiable et accessible.
+
+    Ce que vous pouvez faire avec rDrive :
+
+    - Stocker et organiser vos fichiers
+
+    - Synchroniser vos données sur votre ryvie
+
+    - Accéder à vos fichiers depuis n'importe où
+
+    rDrive est conçu pour être simple, sécurisé et performant — vos données restent sous votre contrôle."
+
+  en:
+    "rDrive is a self-hosted, secure, and easy-to-use file storage solution.
+
+    Manage, share, and sync your files with ease. Whether for personal or professional use, rDrive provides you with a reliable and accessible storage space.
+
+    What you can do with rDrive:
+
+    - Store and organize your files
+
+    - Sync your data on your ryvie
+
+    - Access your files from anywhere
+
+    rDrive is designed to be simple, secure, and efficient — your data remains under your control."
+
+tagline: 
+  fr: "Votre solution de stockage de fichiers auto-hébergée, sécurisée et facile à utiliser."
+  en: "Your self-hosted, secure, and easy-to-use file storage solution."
+
 gallery:
-  - icon.png
+  - icon_.png
   - image1.png
   - image2.png
   

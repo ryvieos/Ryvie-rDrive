@@ -127,7 +127,7 @@ services:
 
   node_create_user:
     container_name: app-rdrive-node-create-user
-    image: julescloud/rdrive-node-create-user:v0.0.3
+    image: julescloud/rdrive-node-create-user:v0.0.4
     env_file:
       - .env
     environment: &backend_env_vars
@@ -167,7 +167,7 @@ services:
   node:
     container_name: app-rdrive-node
     restart: unless-stopped
-    image: julescloud/rdrive-node:v0.0.6
+    image: julescloud/rdrive-node:v0.0.7
     env_file:
       - .env
     ports:

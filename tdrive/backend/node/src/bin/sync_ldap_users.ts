@@ -17,6 +17,8 @@ interface LDAPUser {
   email: string;
   firstName?: string;
   lastName?: string;
+  uid: string;  // LDAP uid - unique identifier
+  dn?: string;  // LDAP DN for reference
 }
 
 interface LDAPConfig {
@@ -50,15 +52,7 @@ async function getAllLDAPUsers(): Promise<LDAPUser[]> {
       usersDN: process.env.LDAP_USERS_DN || 'ou=users,dc=example,dc=org',
     };
 
-    console.log('🔧 LDAP Configuration:');
-    console.log(`   - URL: ${ldapConfig.url}`);
-    console.log(`   - Bind DN: ${ldapConfig.bindDN}`);
-    console.log(`   - Password set: ${ldapConfig.bindPassword ? 'YES' : 'NO'}`);
-    console.log(`   - Users DN: ${ldapConfig.usersDN}`);
-
-    const command = `ldapsearch -x -H "${ldapConfig.url}" -D "${ldapConfig.bindDN}" -w "${ldapConfig.bindPassword}" -b "${ldapConfig.usersDN}" "(objectClass=person)" cn mail givenName sn`;
-    
-    console.log('🔍 Searching for LDAP users...');
+    const command = `ldapsearch -x -H "${ldapConfig.url}" -D "${ldapConfig.bindDN}" -w "${ldapConfig.bindPassword}" -b "${ldapConfig.usersDN}" "(objectClass=person)" cn mail givenName sn uid dn`;
     const output = execSync(command, { encoding: 'utf8' });
     
     const users: LDAPUser[] = [];
@@ -70,7 +64,9 @@ async function getAllLDAPUsers(): Promise<LDAPUser[]> {
         const user: Partial<LDAPUser> = {};
         
         for (const line of lines) {
-          if (line.startsWith('cn: ')) {
+          if (line.startsWith('dn: ')) {
+            user.dn = line.substring(4).trim();
+          } else if (line.startsWith('cn: ')) {
             user.username = line.substring(4).trim();
           } else if (line.startsWith('mail: ')) {
             user.email = line.substring(6).trim();
@@ -78,16 +74,31 @@ async function getAllLDAPUsers(): Promise<LDAPUser[]> {
             user.firstName = line.substring(11).trim();
           } else if (line.startsWith('sn: ')) {
             user.lastName = line.substring(4).trim();
+          } else if (line.startsWith('uid: ')) {
+            user.uid = line.substring(5).trim();
           }
         }
         
-        if (user.email && user.username) {
+        // Skip read-only user
+        if (user.uid === 'read-only') {
+          continue;
+        }
+        
+        if (user.email && user.username && user.uid) {
+          // Fix duplicate names: if firstName and lastName are the same, clear lastName
+          if (user.firstName && user.lastName && user.firstName === user.lastName) {
+            user.lastName = '';
+          }
+          // If no firstName but has lastName, use lastName as firstName
+          if (!user.firstName && user.lastName) {
+            user.firstName = user.lastName;
+            user.lastName = '';
+          }
           users.push(user as LDAPUser);
         }
       }
     }
     
-    console.log(`✅ Found ${users.length} LDAP users`);
     return users;
     
   } catch (error: any) {
@@ -222,28 +233,45 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
     let createdCount = 0;
     let updatedCount = 0;
     let errorCount = 0;
+    let deletedCount = 0;
+    
+    // Create a map of LDAP uids for deletion detection
+    const ldapUids = new Set(ldapUsers.map(u => u.uid));
     
     for (const ldapUser of ldapUsers) {
       try {
-        console.log(`\n📝 Processing user: ${ldapUser.email}`);
-        
-        // Check if user already exists in Tdrive
-        const existingUser = await gr.services.users.getByEmail(ldapUser.email);
+        // CRITICAL: Only use uid to find existing users, NEVER email
+        // This prevents data loss when email changes in LDAP
+        let existingUser = await gr.services.users.getByUsername(ldapUser.uid);
         
         if (existingUser) {
-          console.log(`   ✅ User ${ldapUser.email} already exists in Tdrive`);
-          
-          // Company is already ensured to exist at this point
-          
           // Update user information if needed
           let needsUpdate = false;
           
-          if (existingUser.first_name !== ldapUser.firstName) {
-            existingUser.first_name = ldapUser.firstName;
+          // Update username_canonical to store uid if not already set
+          if (existingUser.username_canonical !== ldapUser.uid) {
+            existingUser.username_canonical = ldapUser.uid;
             needsUpdate = true;
           }
-          if (existingUser.last_name !== ldapUser.lastName) {
-            existingUser.last_name = ldapUser.lastName;
+          
+          // Update email if changed
+          if (existingUser.email_canonical !== ldapUser.email.toLowerCase()) {
+            console.log(`📧 Email updated: ${ldapUser.uid} (${existingUser.email_canonical} → ${ldapUser.email})`);
+            existingUser.email_canonical = ldapUser.email.toLowerCase();
+            needsUpdate = true;
+          }
+          
+          // Set default values for first_name and last_name if null
+          // Avoid duplicate names by leaving last_name empty if same as first_name
+          const newFirstName = ldapUser.firstName || ldapUser.uid.split('@')[0] || '';
+          const newLastName = (ldapUser.lastName && ldapUser.lastName !== newFirstName) ? ldapUser.lastName : '';
+          
+          if (existingUser.first_name !== newFirstName) {
+            existingUser.first_name = newFirstName;
+            needsUpdate = true;
+          }
+          if (existingUser.last_name !== newLastName) {
+            existingUser.last_name = newLastName;
             needsUpdate = true;
           }
           
@@ -268,12 +296,10 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
           if (needsUpdate) {
             const context = { user: { id: 'system' } };
             await gr.services.users.save(existingUser, context);
-            console.log(`   🔄 Updated user basic info for ${ldapUser.email}`);
           }
           
-          // Ensure user is associated with company (crucial for role and visibility)
+          // Ensure user is associated with company
           await gr.services.companies.setUserRole(company.id, existingUser.id, 'member');
-          console.log(`   🏢 Ensured company association for ${ldapUser.email}`);
           
           // Process pending workspace invitations
           await gr.services.workspaces.processPendingUser(existingUser);
@@ -292,9 +318,7 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
               } as Workspace,
               { user: { id: existingUser.id } }
             );
-            console.log(`   🏢 Created workspace for existing user ${ldapUser.email}`);
             
-            // Update recent_workspaces
             existingUser.preferences = {
               ...existingUser.preferences,
               recent_workspaces: [{ 
@@ -303,9 +327,6 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
               }]
             };
           } else {
-            console.log(`   🏢 User ${ldapUser.email} already has ${userWorkspaces.length} workspace(s)`);
-            
-            // Update recent_workspaces with existing workspace
             existingUser.preferences = {
               ...existingUser.preferences,
               recent_workspaces: [{ 
@@ -318,26 +339,20 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
           // Save final user state with recent_workspaces
           const context = { user: { id: 'system' } };
           await gr.services.users.save(existingUser, context);
-          console.log(`   🔗 Updated recent_workspaces for ${ldapUser.email}`);
           
-          // Use the known workspace ID from MongoDB: 77a79af0-7cf5-11f0-b71f-6f7455128b9e
-          // This matches the workspace structure we found in the database
           const workspaceId = '77a79af0-7cf5-11f0-b71f-6f7455128b9e';
-          
-          // Ensure user directory exists for existing user
           await createUserDirectory(existingUser.id, workspaceId);
           
           updatedCount++;
           
         } else {
-          console.log(`   🆕 Creating new user: ${ldapUser.email}`);
-          
-          // Create new user entity in Tdrive
           const newUser = new User();
           newUser.email_canonical = ldapUser.email.toLowerCase();
-          newUser.username_canonical = ldapUser.username.toLowerCase();
-          newUser.first_name = ldapUser.firstName || '';
-          newUser.last_name = ldapUser.lastName || '';
+          newUser.username_canonical = ldapUser.uid.toLowerCase();
+          const firstName = ldapUser.firstName || ldapUser.uid.split('@')[0] || '';
+          const lastName = (ldapUser.lastName && ldapUser.lastName !== firstName) ? ldapUser.lastName : '';
+          newUser.first_name = firstName;
+          newUser.last_name = lastName;
           newUser.password = ''; // No password for LDAP users
           newUser.mail_verified = true;
           newUser.status_icon = '';
@@ -354,90 +369,82 @@ async function syncLDAPUsersToTdrive(): Promise<void> {
           };
           
           // Create execution context (required by Tdrive API)
+          console.log(`🆕 Creating: ${ldapUser.uid} (${ldapUser.email})`);
+          
           const context = { user: { id: 'system' } };
+          const createdUser = await gr.services.users.create(newUser, context);
           
-          const saveResult = await gr.services.users.save(newUser, context);
-          console.log(`   ✅ Created user ${ldapUser.email}`);
+          await gr.services.companies.setUserRole(company.id, createdUser.entity.id, 'member');
           
-          // Use the known workspace ID from MongoDB: 77a79af0-7cf5-11f0-b71f-6f7455128b9e
-          // This matches the workspace structure we found in the database
-          const workspaceId = '77a79af0-7cf5-11f0-b71f-6f7455128b9e';
-          
-          // Ensure user directory exists (after user creation)
-          await createUserDirectory(saveResult.entity.id, workspaceId);
-          
-          // Associate user with company (same logic as signup method)
-          await gr.services.companies.setUserRole(company.id, saveResult.entity.id, 'member');
-          
-          // Process pending workspace invitations (same logic as signup method)
-          await gr.services.workspaces.processPendingUser(saveResult.entity);
-          
-          // If user is in no workspace, get or create one (same logic as signup method)
-          const userWorkspaces = await gr.services.workspaces.getAllForUser(
-            { userId: saveResult.entity.id },
-            { id: company.id }
+          const createdWorkspace = await gr.services.workspaces.create(
+            {
+              company_id: company.id,
+              name: `${createdUser.entity.first_name || createdUser.entity.last_name || createdUser.entity.username_canonical}'s space`,
+            } as Workspace,
+            { user: { id: createdUser.entity.id } }
           );
-          if (userWorkspaces.length === 0) {
-            const createdWorkspace = await gr.services.workspaces.create(
-              {
-                company_id: company.id,
-                name: `${newUser.first_name || newUser.last_name || newUser.username_canonical}'s space`,
-              } as Workspace,
-              { user: { id: saveResult.entity.id } }
-            );
-            console.log(`   🏢 Created workspace for user ${ldapUser.email}`);
-            
-            // Update user's recent_workspaces to include the new workspace (crucial for frontend)
-            saveResult.entity.preferences = {
-              ...saveResult.entity.preferences,
-              recent_workspaces: [{ 
-                company_id: company.id, 
-                workspace_id: createdWorkspace.entity.id 
-              }]
-            };
-            await gr.services.users.save(saveResult.entity, context);
-            console.log(`   🔗 Updated user's recent_workspaces for frontend context`);
-          } else {
-            console.log(`   🏢 User ${ldapUser.email} already has ${userWorkspaces.length} workspace(s)`);
-            
-            // Update user's recent_workspaces with existing workspace (crucial for frontend)
-            saveResult.entity.preferences = {
-              ...saveResult.entity.preferences,
-              recent_workspaces: [{ 
-                company_id: company.id, 
-                workspace_id: userWorkspaces[0].id 
-              }]
-            };
-            await gr.services.users.save(saveResult.entity, context);
-            console.log(`   🔗 Updated user's recent_workspaces for frontend context`);
-          }
+          
+          createdUser.entity.preferences = {
+            ...createdUser.entity.preferences,
+            recent_workspaces: [{
+              company_id: company.id,
+              workspace_id: createdWorkspace.entity.id
+            }]
+          };
+          await gr.services.users.save(createdUser.entity, context);
+          
+          await createUserDirectory(createdUser.entity.id, createdWorkspace.entity.id);
           
           createdCount++;
-          
-          // Note: LDAP integration service is not available in global resolver
-          // LDAP sync will happen automatically during login authentication
-          console.log(`   🔗 User will be synced with LDAP on first login`);
           
         }
         
       } catch (userError: any) {
-        console.error(`   ❌ Error processing user ${ldapUser.email}:`, userError.message);
+        console.error(`❌ Error: ${ldapUser.uid} - ${userError.message}`);
         errorCount++;
       }
     }
     
-    console.log('\n📊 Synchronization Summary:');
-    console.log(`   🆕 Created: ${createdCount} users`);
-    console.log(`   🔄 Updated: ${updatedCount} users`);
-    console.log(`   ❌ Errors: ${errorCount} users`);
-    console.log('✅ LDAP synchronization completed!');
+    // Delete users from rDrive that no longer exist in LDAP
+    try {
+      const allRDriveUsers = await gr.services.users.list(
+        { limitStr: '1000' },
+        {},
+        { user: { id: 'system' } }
+      );
+      
+      for (const rdriveUser of allRDriveUsers.getEntities()) {
+        // Skip non-LDAP users or already deleted users
+        if (!rdriveUser.username_canonical || rdriveUser.deleted || rdriveUser.username_canonical.startsWith('deleted-user-')) {
+          continue;
+        }
+        
+        // Check if this user's uid exists in LDAP
+        if (!ldapUids.has(rdriveUser.username_canonical)) {
+          console.log(`🗑️  Deleting: ${rdriveUser.username_canonical} (${rdriveUser.email_canonical})`);
+          
+          try {
+            await gr.services.users.anonymizeAndDelete(
+              { id: rdriveUser.id },
+              { user: { id: 'system', server_request: true } },
+              true
+            );
+            
+            deletedCount++;
+          } catch (deleteError) {
+            console.error(`❌ Delete error: ${rdriveUser.username_canonical} - ${deleteError}`);
+            errorCount++;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error checking for deletions:', error);
+    }
     
-    // Reindex users after synchronization to ensure they appear in the frontend
-    if (createdCount > 0 || updatedCount > 0) {
-      console.log('\n🔄 Users were created or updated, starting reindexing...');
+    console.log('\n📊 Sync Summary: 🆕 ' + createdCount + ' created | 🔄 ' + updatedCount + ' updated | 🗑️  ' + deletedCount + ' deleted | ❌ ' + errorCount + ' errors');
+    
+    if (createdCount > 0 || updatedCount > 0 || deletedCount > 0) {
       await reindexUsers();
-    } else {
-      console.log('\n⏭️ No users were created or updated, skipping reindexing');
     }
     
   } catch (error: any) {
