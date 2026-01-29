@@ -201,10 +201,16 @@ export class UserServiceImpl {
         user.deleted = true;
         user.delete_process_started_epoch = new Date().getTime();
 
-        await gr.services.console.getClient().userWasDeletedForceLogout({
-          userId: user.id,
-          email: userCopy.email_canonical,
-        });
+        try {
+          await gr.services.console.getClient().userWasDeletedForceLogout({
+            userId: user.id,
+            email: userCopy.email_canonical,
+          });
+        } catch (error) {
+          // Ignore error if method is not implemented (e.g., in internal client)
+          // The user deletion will still proceed
+          logger.debug({ error }, "userWasDeletedForceLogout not available, continuing with deletion");
+        }
 
         await this.save(user);
 
